@@ -1,0 +1,79 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  settings-page:
+    name: Settings page (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Debian trixie is what PikaOS and friends are built on, so this job
+          # produces a plugin that is usable on those systems.
+          - name: debian trixie
+            image: debian:trixie
+            artifact: true
+          # Arch tracks KDE Frameworks closely, so this job is the early warning
+          # for a framework change that breaks the build.
+          - name: arch
+            image: archlinux:latest
+            artifact: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies (debian)
+        if: startsWith(matrix.image, 'debian')
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake \
+            qt6-base-dev qt6-base-dev-tools \
+            libkf6coreaddons-dev libkf6config-dev libkf6configwidgets-dev \
+            libkf6i18n-dev libkf6kcmutils-dev libkf6xmlgui-dev
+
+      - name: Install build dependencies (arch)
+        if: startsWith(matrix.image, 'archlinux')
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel cmake qt6-base kcoreaddons kconfig kconfigwidgets \
+            ki18n kcmutils kxmlgui
+
+      - name: Build
+        run: |
+          cmake -S kcm -B kcm/build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+          cmake --build kcm/build --parallel
+
+      - name: Upload plugin
+        if: matrix.artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libkcm_toggle_windows-debian-trixie
+          path: kcm/build/libkcm_toggle_windows.so
+          if-no-files-found: error
+
+  script:
+    name: KWin script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        run: node --check script/contents/code/main.js
+
+      - name: Check JSON and XML are well formed
+        run: |
+          python3 -m json.tool script/metadata.json > /dev/null
+          python3 -m json.tool kcm/src/metadata.json > /dev/null
+          python3 -c "import xml.dom.minidom as m; m.parse('script/contents/config/main.xml'); m.parse('script/contents/ui/config.ui')"
+
+      - name: Check shell scripts
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck install.sh uninstall.sh

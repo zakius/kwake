@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Id": "kcm_toggle_windows",
+        "Name": "Toggle Windows",
+        "Description": "Applications toggled by the Toggle Windows KWin script",
+        "Icon": "preferences-system-windows",
+        "License": "GPL-3.0-or-later",
+        "Category": "Window Management"
+    }
+}
