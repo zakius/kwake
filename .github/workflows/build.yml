@@ -90,7 +90,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
-          sha256sum -- *.so *.run > SHA256SUMS
+          sha256sum -- *.run > SHA256SUMS
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
-            -- *.run *.so SHA256SUMS
+            -- *.run SHA256SUMS

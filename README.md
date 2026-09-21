@@ -22,8 +22,8 @@ Plasma 6 start at 25.04.
 
 ### 2. Build the settings page yourself (optional)
 
-The installer downloads the settings page prebuilt for x86_64 and ARM64, so
-most installs skip this step. Build it yourself for another CPU type or to try
+The release installer carries the settings page prebuilt for x86_64 and ARM64,
+so most installs skip this step. Build it yourself for another CPU type or to try
 changes that are not released yet. First the build tools:
 
 Debian and Ubuntu:
@@ -60,31 +60,32 @@ next step installs.
 Download the installer from the latest release and run it:
 
 ```sh
-gh release download --repo zakius/kwin-toggle-windows --pattern '*.run'
-sh toggle-windows-*.run
+gh release download --repo zakius/kwin-toggle-windows --pattern toggle-windows.run
+sh toggle-windows.run
 ```
 
 The `.run` file carries everything: the scripts and the settings page for
 x86_64 and ARM64. It checks its own SHA256 checksum before unpacking, then asks
 for root to place the settings page next to KWin's own plugins. Everything else
-is installed for your user only. While the repository is private, download it
-with `gh` as above or from the release page while logged in.
+is installed for your user only. It installs only what it carries and never
+goes online. While the repository is private, download it with `gh` as above or
+from the release page while logged in.
 
-From a git checkout instead:
+To update later, let it fetch, verify and run the latest release's installer:
 
 ```sh
-git clone https://github.com/zakius/kwin-toggle-windows.git
-cd kwin-toggle-windows
-./install.sh
+sh toggle-windows.run -- --online
 ```
 
-This downloads the settings page for your CPU from the latest release and
-checks it against the release's `SHA256SUMS`, through `gh` when it is logged in
-and `curl` otherwise. A checkout of a release tag gets that release's settings
-page. To install one you built in step 2 instead:
+Options for the installer go after `--`; the ones before it belong to the
+`.run` wrapper itself.
+
+From a git checkout, install a settings page you built in step 2, or the latest
+release:
 
 ```sh
 ./install.sh --plugin kcm/build/bin/kwin/effects/configs/toggle_windows.so
+./install.sh --online
 ```
 
 Then add your applications in **System Settings → Window Management →
@@ -93,7 +94,7 @@ KWin Scripts**, using the settings icon next to Toggle Windows.
 ## Uninstall
 
 ```sh
-sh toggle-windows-*.run -- --uninstall
+sh toggle-windows.run -- --uninstall
 ```
 
 or `./uninstall.sh` from a git checkout.
@@ -169,10 +170,10 @@ git push origin v1.2.3
 ```
 
 CI builds the settings page on Debian 13 for x86_64 and ARM64, loads each build
-on Debian 13, Ubuntu 26.04 and Fedora 44, and publishes a GitHub release with
-the `toggle-windows-vX.Y.Z.run` installer, both plugins and `SHA256SUMS` only
-if every check and load test passes. The `.run` file is built by makeself from
-`ci/make-bundle.sh`; never edit one by hand.
+on Debian 13, Ubuntu 26.04 and Fedora 44, and only if every check and load test
+passes publishes a GitHub release with `toggle-windows.run` and `SHA256SUMS`.
+The `.run` file is built by makeself from `ci/make-bundle.sh`; never edit one
+by hand.
 
 ## Licence
 

@@ -8,19 +8,23 @@ REPO="zakius/kwin-toggle-windows"
 # The settings host looks the plugin up by the script's id, so this must equal
 # KPlugin.Id in script/metadata.json; check.sh fails if they differ.
 PLUGIN_ID="toggle_windows"
-# Empty means: download the release build for this CPU.
+# The self-contained installer attached to every release.
+BUNDLE="toggle-windows.run"
+# Empty means: the plugin for this CPU embedded next to this script.
 PLUGIN_FILE=""
+ONLINE=0
 
 usage() {
     cat <<USAGE
 Usage: $0 [options]
 
-The settings page plugin comes from, in order: --plugin FILE, the plugin for
-this CPU bundled next to this script in a release's .run file, or a download
-from the project's GitHub releases.
+Without options, installs the settings page plugin for this CPU that ships next
+to this script in a release's .run file. Nothing is downloaded.
 
-  --plugin FILE   Install this settings page plugin instead of downloading
-                  one, e.g. one built as described in the README.
+  --plugin FILE   Install this settings page plugin instead, e.g. one built as
+                  described in the README.
+  --online        Download the latest release's installer, verify it and run
+                  it, installing or updating everything to that release.
   --uninstall     Remove everything this installed.
   -h, --help      Show this message.
 USAGE
@@ -29,17 +33,12 @@ USAGE
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --plugin) PLUGIN_FILE="$2"; shift 2 ;;
+        --online) ONLINE=1; shift ;;
         --uninstall) exec "$SOURCE_DIR/uninstall.sh" ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
-# A release's .run file carries the plugin for each CPU next to this script.
-bundled="$SOURCE_DIR/$PLUGIN_ID-$(uname -m).so"
-[[ -z "$PLUGIN_FILE" && -f "$bundled" ]] && PLUGIN_FILE="$bundled"
-# Checked before anything is touched, so a mistyped path changes nothing.
-[[ -z "$PLUGIN_FILE" || -f "$PLUGIN_FILE" ]] || { echo "error: $PLUGIN_FILE does not exist" >&2; exit 1; }
-
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # The directory KWin keeps its own config plugins in. It exists wherever KWin
@@ -56,46 +55,51 @@ kwin_plugin_dir() {
     exit 1
 }
 
-download_plugin() {
-    local arch asset tag base
-    arch=$(uname -m)
-    case "$arch" in
-        x86_64|aarch64) ;;
-        *) echo "error: no prebuilt settings page for $arch; build one and pass it with --plugin" >&2; exit 1 ;;
-    esac
-    asset="$PLUGIN_ID-$arch.so"
-    # A checkout sitting on a release tag gets that release's plugin; anything
-    # else gets the latest release.
-    tag=$(git -C "$SOURCE_DIR" describe --tags --exact-match 2>/dev/null || true)
+# Fetches the latest release's installer and runs it; that installer then uses
+# its own embedded payload.
+install_latest() {
     # Global, not local: the EXIT trap runs after this function has returned.
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
-    echo "==> Downloading settings page (${tag:-latest release}, $arch)"
+    echo "==> Downloading the latest release of $REPO"
     if have gh && gh auth status >/dev/null 2>&1; then
-        gh release download ${tag:+"$tag"} --repo "$REPO" \
-            --pattern "$asset" --pattern SHA256SUMS --dir "$tmp" || download_failed
+        gh release download --repo "$REPO" \
+            --pattern "$BUNDLE" --pattern SHA256SUMS --dir "$tmp" || download_failed
     else
-        base="https://github.com/$REPO/releases/latest/download"
-        [[ -n "$tag" ]] && base="https://github.com/$REPO/releases/download/$tag"
-        curl -fsSL -o "$tmp/$asset" "$base/$asset" || download_failed
-        curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" || download_failed
+        curl -fsSL -o "$tmp/$BUNDLE" "https://github.com/$REPO/releases/latest/download/$BUNDLE" || download_failed
+        curl -fsSL -o "$tmp/SHA256SUMS" "https://github.com/$REPO/releases/latest/download/SHA256SUMS" || download_failed
     fi
-    # Verified before the file goes anywhere near root.
+    # Verified before it runs anything, let alone anything as root.
     (cd "$tmp" && sha256sum --check --ignore-missing --quiet SHA256SUMS) || {
-        echo "error: the downloaded settings page does not match its checksum" >&2
+        echo "error: the downloaded installer does not match its checksum" >&2
         exit 1
     }
-
-    PLUGIN_FILE="$tmp/$asset"
+    sh "$tmp/$BUNDLE"
 }
 
 download_failed() {
-    echo "error: could not download the settings page from $REPO." >&2
+    echo "error: could not download the latest release from $REPO." >&2
     echo "       For a private repository, install gh and run 'gh auth login'." >&2
-    echo "       Or build it yourself and pass it with --plugin; see the README." >&2
     exit 1
 }
+
+if [[ $ONLINE -eq 1 ]]; then
+    install_latest
+    exit
+fi
+
+# A release's .run file carries the plugin for each CPU next to this script.
+bundled="$SOURCE_DIR/$PLUGIN_ID-$(uname -m).so"
+[[ -z "$PLUGIN_FILE" && -f "$bundled" ]] && PLUGIN_FILE="$bundled"
+# Checked before anything is touched, so a mistake changes nothing.
+if [[ -z "$PLUGIN_FILE" ]]; then
+    echo "error: no settings page for $(uname -m) next to this script." >&2
+    echo "       Pass --plugin FILE, or --online to install the latest release." >&2
+    exit 1
+fi
+[[ -f "$PLUGIN_FILE" ]] || { echo "error: $PLUGIN_FILE does not exist" >&2; exit 1; }
+
 
 install_plugin() {
     local dest
@@ -114,7 +118,6 @@ rm -rf "$SCRIPT_DIR"
 mkdir -p "$SCRIPT_DIR"
 cp -r "$SOURCE_DIR/script/." "$SCRIPT_DIR/"
 
-[[ -n "$PLUGIN_FILE" ]] || download_plugin
 install_plugin
 
 echo "==> Enabling the script"
