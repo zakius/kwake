@@ -12,18 +12,21 @@ echo "==> KWin script"
 node test_main.js
 
 echo "==> Metadata"
-python3 -m json.tool script/metadata.json >/dev/null
-python3 -m json.tool kcm/src/metadata.json >/dev/null
-# The settings page only opens if the script points at a plugin named after the
-# script itself; see kcm/CMakeLists.txt.
-python3 - <<'PY'
-import json
-meta = json.load(open("script/metadata.json"))
-expected = "kwin/effects/configs/" + meta["KPlugin"]["Id"]
-actual = meta.get("X-KDE-ConfigModule")
-if actual != expected:
-    raise SystemExit(f"script/metadata.json: X-KDE-ConfigModule is {actual!r}, must be {expected!r}")
-PY
+# Parsing both files also validates them. The settings page only opens if the
+# script points at a plugin named after the script itself (see
+# kcm/CMakeLists.txt), and install.sh installs the plugin under that name.
+node -e '
+const fs = require("fs");
+const meta = JSON.parse(fs.readFileSync("script/metadata.json", "utf8"));
+JSON.parse(fs.readFileSync("kcm/src/metadata.json", "utf8"));
+const id = meta.KPlugin.Id;
+const fail = (message) => { console.error(message); process.exit(1); };
+if (meta["X-KDE-ConfigModule"] !== "kwin/effects/configs/" + id)
+    fail("script/metadata.json: X-KDE-ConfigModule must be kwin/effects/configs/" + id);
+const found = fs.readFileSync("install.sh", "utf8").match(/^PLUGIN_ID="([^"]+)"/m);
+if (!found || found[1] !== id)
+    fail("install.sh: PLUGIN_ID must be " + id);
+'
 
 echo "==> Shell scripts"
 shellcheck install.sh uninstall.sh check.sh ci/*.sh

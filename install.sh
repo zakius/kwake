@@ -5,9 +5,9 @@ set -euo pipefail
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/toggle_windows"
 REPO="zakius/kwin-toggle-windows"
-# The settings host looks the plugin up by the script's id.
-PLUGIN_ID=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["KPlugin"]["Id"])' \
-    "$SOURCE_DIR/script/metadata.json")
+# The settings host looks the plugin up by the script's id, so this must equal
+# KPlugin.Id in script/metadata.json; check.sh fails if they differ.
+PLUGIN_ID="toggle_windows"
 SETTINGS_PAGE="prebuilt"
 
 usage() {

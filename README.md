@@ -15,8 +15,7 @@ application.
 
 ### 1. Requirements
 
-KDE Plasma 6, and Python 3 for the installer, which desktop installs of Debian,
-Ubuntu and Fedora already have.
+KDE Plasma 6. Nothing else is needed.
 
 Ubuntu 24.04 ships Plasma 5, which is not supported; Ubuntu releases with
 Plasma 6 start at 25.04.
