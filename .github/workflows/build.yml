@@ -10,7 +10,9 @@ jobs:
   checks:
     name: Static checks (clazy, qmllint, shellcheck)
     runs-on: ubuntu-latest
-    container: debian:trixie
+    # Lints need type information as current as the KDE stack the form targets;
+    # trixie's older Kirigami and KQuickControls lack some of it.
+    container: debian:sid
     steps:
       - uses: actions/checkout@v5
 
@@ -37,8 +39,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Debian trixie is what PikaOS and friends are built on, so this job
-          # produces a plugin that is usable on those systems.
+          # The oldest KDE Frameworks 6 stack in use. A plugin built against it
+          # also loads on newer 6.x releases, so this artifact reaches furthest.
           - name: debian trixie
             image: debian:trixie
             artifact: true

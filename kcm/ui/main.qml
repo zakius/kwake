@@ -4,6 +4,8 @@
     reads: Name | resourceClass | caption | shortcut
 */
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
