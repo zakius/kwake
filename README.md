@@ -79,6 +79,7 @@ sh toggle-windows.run -- --online
 
 Options for the installer go after `--`; the ones before it belong to the
 `.run` wrapper itself.
+`sh toggle-windows.run --info` shows which release a file is.
 
 From a git checkout, install a settings page you built in step 2, or the latest
 release:
