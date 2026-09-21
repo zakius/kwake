@@ -11,7 +11,7 @@ qmllint=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qml
 echo "==> KWin script"
 node test_main.js
 
-echo "==> Metadata and config files"
+echo "==> Metadata"
 python3 -m json.tool script/metadata.json >/dev/null
 python3 -m json.tool kcm/src/metadata.json >/dev/null
 # The settings page only opens if the script points at a plugin named after the
@@ -24,8 +24,6 @@ actual = meta.get("X-KDE-ConfigModule")
 if actual != expected:
     raise SystemExit(f"script/metadata.json: X-KDE-ConfigModule is {actual!r}, must be {expected!r}")
 PY
-python3 -c "import sys, xml.dom.minidom as m; [m.parse(f) for f in sys.argv[1:]]" \
-    script/contents/config/main.xml script/contents/ui/config.ui
 
 echo "==> Shell scripts"
 shellcheck install.sh uninstall.sh check.sh ci/*.sh

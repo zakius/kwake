@@ -68,15 +68,7 @@ To build the settings page from this checkout instead:
 ./install.sh --build
 ```
 
-Without the settings page, install with:
-
-```sh
-./install.sh --script-only
-```
-
-The settings then open as a plain text editor instead of a form.
-
-Either way, add your applications in **System Settings → Window Management →
+Then add your applications in **System Settings → Window Management →
 KWin Scripts**, using the settings icon next to Toggle Windows.
 
 ## Uninstall
@@ -114,9 +106,6 @@ application in the key `Entries`:
 Name | window class | title | shortcut
 ```
 
-The settings page is only an editor for that value, which is why
-`--script-only` can offer the same settings as plain text.
-
 ## Compatibility
 
 The script half is plain JavaScript and depends only on KWin's scripting API.
@@ -127,8 +116,7 @@ against Qt 6 and KDE Frameworks 6 but no KWin library, so Plasma and KWin
 updates cannot break it. Qt and KDE Frameworks both keep ABI stable across a
 major version, so it keeps working through 6.x updates. Release builds load on
 any system with Qt 6.8 and KDE Frameworks 6.13 or newer. A future Qt 7 and
-Frameworks 7 transition would need a rebuild, and until then
-`install.sh --script-only` gives you the text editor fallback.
+Frameworks 7 transition would need a rebuild.
 
 ## Checks
 

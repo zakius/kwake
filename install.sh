@@ -19,8 +19,6 @@ ARM64), from the project's GitHub releases.
 
   --build         Build the settings page from this checkout instead. Needs
                   the build tools listed in the README.
-  --script-only   Skip the settings page; the settings open as a plain text
-                  editor instead.
   -h, --help      Show this message.
 USAGE
 }
@@ -28,7 +26,6 @@ USAGE
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --build) SETTINGS_PAGE="build"; shift ;;
-        --script-only) SETTINGS_PAGE="none"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
@@ -55,7 +52,7 @@ install_prebuilt() {
     arch=$(uname -m)
     case "$arch" in
         x86_64|aarch64) ;;
-        *) echo "error: no prebuilt settings page for $arch; use --build or --script-only" >&2; exit 1 ;;
+        *) echo "error: no prebuilt settings page for $arch; use --build" >&2; exit 1 ;;
     esac
     asset="$PLUGIN_ID-$arch.so"
     # A checkout sitting on a release tag gets that release's plugin; anything
@@ -89,7 +86,7 @@ install_prebuilt() {
 download_failed() {
     echo "error: could not download the settings page from $REPO." >&2
     echo "       For a private repository, install gh and run 'gh auth login'." >&2
-    echo "       Or build it here with --build, or skip it with --script-only." >&2
+    echo "       Or build it here with --build." >&2
     exit 1
 }
 
@@ -117,14 +114,6 @@ cp -r "$SOURCE_DIR/script/." "$SCRIPT_DIR/"
 case "$SETTINGS_PAGE" in
     prebuilt) install_prebuilt ;;
     build) install_built ;;
-    none)
-        echo "==> Skipping settings page; falling back to the plain text editor"
-        # Without the compiled page, KDE's generic editor renders contents/ui/config.ui.
-        python3 -c 'import json, sys
-meta = json.load(open(sys.argv[1]))
-meta["X-KDE-ConfigModule"] = "kwin/effects/configs/kcm_kwin4_genericscripted"
-json.dump(meta, open(sys.argv[1], "w"), indent=4)' "$SCRIPT_DIR/metadata.json"
-        ;;
 esac
 
 echo "==> Enabling the script"
