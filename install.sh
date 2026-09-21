@@ -6,7 +6,8 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/toggle_windows"
 REPO="zakius/kwin-toggle-windows"
 # The settings host looks the plugin up by the script's id.
-PLUGIN_ID=$(sed -n 's/.*"Id": *"\([^"]*\)".*/\1/p' "$SOURCE_DIR/script/metadata.json")
+PLUGIN_ID=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["KPlugin"]["Id"])' \
+    "$SOURCE_DIR/script/metadata.json")
 SETTINGS_PAGE="prebuilt"
 
 usage() {
@@ -119,8 +120,10 @@ case "$SETTINGS_PAGE" in
     none)
         echo "==> Skipping settings page; falling back to the plain text editor"
         # Without the compiled page, KDE's generic editor renders contents/ui/config.ui.
-        sed -i "s|\"kwin/effects/configs/$PLUGIN_ID\"|\"kwin/effects/configs/kcm_kwin4_genericscripted\"|" \
-            "$SCRIPT_DIR/metadata.json"
+        python3 -c 'import json, sys
+meta = json.load(open(sys.argv[1]))
+meta["X-KDE-ConfigModule"] = "kwin/effects/configs/kcm_kwin4_genericscripted"
+json.dump(meta, open(sys.argv[1], "w"), indent=4)' "$SCRIPT_DIR/metadata.json"
         ;;
 esac
 
