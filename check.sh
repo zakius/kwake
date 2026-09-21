@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Static checks for everything in the repository. CI runs exactly this.
+# Lints everything except the C++, which clazy checks while compiling in
+# ci/build-plugin.sh. CI runs exactly this.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
-
-# Checks clazy runs on the C++. level2 includes levels 0 and 1, which cover
-# lambdas connected without a context object, a use-after-free waiting to
-# happen. The named extras are opt-in checks that matter for a class QML talks to.
-CLAZY_CHECKS="level2,qproperty-type-mismatch,qt-keywords,signal-with-return-value,thread-with-slots,detaching-member,unused-result-check,assert-with-side-effects"
 
 find_tool() {
     for candidate in "$@"; do
@@ -56,12 +52,5 @@ echo "==> QML (qmllint)"
 "$qmllint" -I "$("$qtpaths" --query QT_INSTALL_QML)" \
     --missing-property warning --unqualified info --max-warnings 0 \
     kcm/ui/main.qml
-
-echo "==> C++ (clazy, warnings are errors)"
-export CLAZY_CHECKS
-# System headers are not ours to fix; unused-result-check misfires inside libstdc++.
-export CLAZY_IGNORE_DIRS=".*/build-clazy/.*|/usr/.*"
-cmake -S kcm -B kcm/build-clazy -DCMAKE_CXX_COMPILER=clazy -DCMAKE_CXX_FLAGS=-Werror >/dev/null
-cmake --build kcm/build-clazy --clean-first
 
 echo "All checks passed."

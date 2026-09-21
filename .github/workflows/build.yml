@@ -8,27 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  checks:
-    name: Static checks (clazy, qmllint, shellcheck)
+  lint:
+    name: Lint (qmllint, shellcheck)
     runs-on: ubuntu-latest
-    # Lints need type information as current as the KDE stack the form targets.
-    # Arch tracks it closely and, unlike Debian sid, stays installable mid-transition.
-    # check.sh's clazy step compiles the whole plugin, so this job also catches a
-    # current KDE Frameworks release that breaks the build.
+    # qmllint needs type information as current as the KDE stack the form
+    # targets. Arch tracks it closely and, unlike Debian sid, stays installable
+    # mid-transition. The C++ is checked by clazy in the plugin job.
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v5
 
       - name: Install tools
-        run: |
-          pacman -Syu --noconfirm --needed \
-            base-devel cmake extra-cmake-modules clazy qt6-base qt6-declarative kcoreaddons kconfig kcmutils kirigami kdeclarative nodejs python shellcheck
+        run: pacman -Syu --noconfirm --needed qt6-declarative kcmutils kirigami kdeclarative nodejs python shellcheck
 
       - name: Run checks
         run: ./check.sh
 
   plugin:
-    name: Plugin (Debian 13, ${{ matrix.arch }})
+    name: Build with clazy (Debian 13, ${{ matrix.arch }})
     # Each architecture builds natively on its own runner.
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
@@ -69,7 +66,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [checks, load-test]
+    needs: [lint, load-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
