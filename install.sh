@@ -57,7 +57,7 @@ kwin_plugin_dir() {
 }
 
 install_prebuilt() {
-    local arch asset tag tmp base dest
+    local arch asset tag base dest
     arch=$(uname -m)
     case "$arch" in
         x86_64|aarch64) ;;
@@ -67,6 +67,7 @@ install_prebuilt() {
     # A checkout sitting on a release tag gets that release's plugin; anything
     # else gets the latest release.
     tag=$(git -C "$SOURCE_DIR" describe --tags --exact-match 2>/dev/null || true)
+    # Global, not local: the EXIT trap runs after this function has returned.
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
