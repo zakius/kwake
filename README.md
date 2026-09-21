@@ -13,16 +13,20 @@ application.
 
 ## Install
 
-```sh
-git clone https://github.com/zakius/kwin-toggle-windows.git
-cd kwin-toggle-windows
-./install.sh
-```
+### 1. Requirements
 
-The settings page is a compiled plugin, so `install.sh` builds it and asks for
-root to place it in Qt's plugin directory. Everything else is user-local.
+KDE Plasma 6. Nothing else is needed for the script itself.
 
-Build dependencies. Debian 13 and Ubuntu 26.04 use the same packages:
+Ubuntu 24.04 ships Plasma 5, which is not supported; Ubuntu releases with
+Plasma 6 start at 25.04.
+
+### 2. Settings page build tools (optional)
+
+The settings page is a compiled plugin, so building it needs a compiler and
+the Qt and KDE development packages. Skip this step if you are fine editing
+the settings as plain text instead.
+
+Debian and Ubuntu:
 
 ```sh
 sudo apt install build-essential cmake extra-cmake-modules \
@@ -38,18 +42,30 @@ sudo dnf install gcc-c++ cmake extra-cmake-modules \
     kf6-kcoreaddons-devel kf6-kconfig-devel kf6-kcmutils-devel
 ```
 
-These were tested on Debian 13, Ubuntu 26.04 and Fedora 44. Ubuntu 24.04 ships
-Plasma 5, which neither the script nor the settings page supports; Ubuntu
-releases with Plasma 6 start at 25.04.
+Tested on Debian 13, Ubuntu 26.04 and Fedora 44. Debian and Ubuntu use the
+same package names.
 
-To skip the compiled page and use a plain text editor for the same settings:
+### 3. Install
+
+```sh
+git clone https://github.com/zakius/kwin-toggle-windows.git
+cd kwin-toggle-windows
+./install.sh
+```
+
+This builds the settings page and asks for root to place it in Qt's plugin
+directory. Everything else is installed for your user only.
+
+Without the settings page, install with:
 
 ```sh
 ./install.sh --script-only
 ```
 
-Then add your applications in **System Settings → Window Management → KWin
-Scripts**, using the settings icon next to Toggle Windows.
+The settings then open as a plain text editor instead of a form.
+
+Either way, add your applications in **System Settings → Window Management →
+KWin Scripts**, using the settings icon next to Toggle Windows.
 
 ## Uninstall
 
