@@ -15,11 +15,13 @@ usage() {
     cat <<USAGE
 Usage: $0 [options]
 
-By default the settings page is downloaded, prebuilt for this CPU (x86_64 or
-ARM64), from the project's GitHub releases.
+The settings page plugin comes from, in order: --plugin FILE, the plugin for
+this CPU bundled next to this script in a release's .run file, or a download
+from the project's GitHub releases.
 
   --plugin FILE   Install this settings page plugin instead of downloading
                   one, e.g. one built as described in the README.
+  --uninstall     Remove everything this installed.
   -h, --help      Show this message.
 USAGE
 }
@@ -27,10 +29,14 @@ USAGE
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --plugin) PLUGIN_FILE="$2"; shift 2 ;;
+        --uninstall) exec "$SOURCE_DIR/uninstall.sh" ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
+# A release's .run file carries the plugin for each CPU next to this script.
+bundled="$SOURCE_DIR/$PLUGIN_ID-$(uname -m).so"
+[[ -z "$PLUGIN_FILE" && -f "$bundled" ]] && PLUGIN_FILE="$bundled"
 # Checked before anything is touched, so a mistyped path changes nothing.
 [[ -z "$PLUGIN_FILE" || -f "$PLUGIN_FILE" ]] || { echo "error: $PLUGIN_FILE does not exist" >&2; exit 1; }
 

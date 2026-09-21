@@ -52,10 +52,25 @@ cmake -S kcm -B kcm/build -DCMAKE_BUILD_TYPE=Release
 cmake --build kcm/build
 ```
 
-This produces `kcm/build/bin/kwin/effects/configs/toggle_windows.so`, which the next
-step installs.
+This produces `kcm/build/bin/kwin/effects/configs/toggle_windows.so`, which the
+next step installs.
 
 ### 3. Install
+
+Download the installer from the latest release and run it:
+
+```sh
+gh release download --repo zakius/kwin-toggle-windows --pattern '*.run'
+sh toggle-windows-*.run
+```
+
+The `.run` file carries everything: the scripts and the settings page for
+x86_64 and ARM64. It checks its own SHA256 checksum before unpacking, then asks
+for root to place the settings page next to KWin's own plugins. Everything else
+is installed for your user only. While the repository is private, download it
+with `gh` as above or from the release page while logged in.
+
+From a git checkout instead:
 
 ```sh
 git clone https://github.com/zakius/kwin-toggle-windows.git
@@ -63,14 +78,10 @@ cd kwin-toggle-windows
 ./install.sh
 ```
 
-This downloads the settings page for your CPU from the latest GitHub release,
-checks it against the release's `SHA256SUMS`, and asks for root to place it
-next to KWin's own plugins. Everything else is installed for your user only.
-A checkout of a release tag gets that release's settings page instead of the
-latest. Downloads go through `gh` when it is installed and logged in, which a
-private repository needs, and through `curl` otherwise.
-
-To install a settings page you built in step 2 instead of downloading one:
+This downloads the settings page for your CPU from the latest release and
+checks it against the release's `SHA256SUMS`, through `gh` when it is logged in
+and `curl` otherwise. A checkout of a release tag gets that release's settings
+page. To install one you built in step 2 instead:
 
 ```sh
 ./install.sh --plugin kcm/build/bin/kwin/effects/configs/toggle_windows.so
@@ -82,8 +93,10 @@ KWin Scripts**, using the settings icon next to Toggle Windows.
 ## Uninstall
 
 ```sh
-./uninstall.sh
+sh toggle-windows-*.run -- --uninstall
 ```
+
+or `./uninstall.sh` from a git checkout.
 
 This puts any hidden windows back on the taskbar and unregisters the shortcuts
 before removing the files, so nothing is left behind in the shortcuts editor.
@@ -155,9 +168,11 @@ git tag -a v1.2.3 -m "v1.2.3"
 git push origin v1.2.3
 ```
 
-CI builds the settings page on Debian 13 for x86_64 and ARM64, loads each
-build on Debian 13, Ubuntu 26.04 and Fedora 44, and publishes a GitHub release
-with both plugins and `SHA256SUMS` only if every check and load test passes.
+CI builds the settings page on Debian 13 for x86_64 and ARM64, loads each build
+on Debian 13, Ubuntu 26.04 and Fedora 44, and publishes a GitHub release with
+the `toggle-windows-vX.Y.Z.run` installer, both plugins and `SHA256SUMS` only
+if every check and load test passes. The `.run` file is built by makeself from
+`ci/make-bundle.sh`; never edit one by hand.
 
 ## Licence
 
