@@ -22,13 +22,25 @@ cd kwin-toggle-windows
 The settings page is a compiled plugin, so `install.sh` builds it and asks for
 root to place it in Qt's plugin directory. Everything else is user-local.
 
-Build dependencies on Debian and derivatives:
+Build dependencies. Debian 13 and Ubuntu 26.04 use the same packages:
 
 ```sh
 sudo apt install build-essential cmake extra-cmake-modules \
     qt6-base-dev qt6-declarative-dev \
     libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev
 ```
+
+Fedora:
+
+```sh
+sudo dnf install gcc-c++ cmake extra-cmake-modules \
+    qt6-qtbase-devel qt6-qtdeclarative-devel \
+    kf6-kcoreaddons-devel kf6-kconfig-devel kf6-kcmutils-devel
+```
+
+These were tested on Debian 13, Ubuntu 26.04 and Fedora 44. Ubuntu 24.04 ships
+Plasma 5, which neither the script nor the settings page supports; Ubuntu
+releases with Plasma 6 start at 25.04.
 
 To skip the compiled page and use a plain text editor for the same settings:
 
