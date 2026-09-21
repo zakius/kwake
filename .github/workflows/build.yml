@@ -10,23 +10,18 @@ jobs:
   checks:
     name: Static checks (clazy, qmllint, shellcheck)
     runs-on: ubuntu-latest
-    # Lints need type information as current as the KDE stack the form targets;
-    # trixie's older Kirigami and KQuickControls lack some of it.
-    container: debian:sid
+    # Lints need type information as current as the KDE stack the form targets.
+    # Arch tracks it closely and, unlike Debian sid, stays installable mid-transition.
+    container: archlinux:latest
     steps:
       - uses: actions/checkout@v5
 
       - name: Install tools
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential cmake extra-cmake-modules clazy \
-            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-dev-tools \
-            libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev \
-            qml6-module-org-kde-kirigami qml6-module-org-kde-kcmutils \
-            qml6-module-org-kde-kquickcontrols qml6-module-qtquick-controls \
-            qml6-module-qtquick-layouts \
-            nodejs python3 shellcheck
+          pacman -Syu --noconfirm --needed \
+            base-devel cmake extra-cmake-modules clazy qt6-base qt6-declarative \
+            kcoreaddons kconfig kcmutils kirigami kdeclarative \
+            nodejs python shellcheck
 
       - name: Run checks
         run: ./check.sh

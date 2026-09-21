@@ -61,6 +61,11 @@ KCM.SimpleKCM {
         kcm.entries = written
     }
 
+    function removeApplication(index) {
+        apps.remove(index)
+        commit()
+    }
+
     function addApplication() {
         apps.append({ uid: nextUid++, name: "", windowClass: "", caption: "", shortcut: "" })
     }
@@ -117,27 +122,30 @@ KCM.SimpleKCM {
 
                 Layout.fillWidth: true
 
-                contentItem: GridLayout {
-                    columns: 4
-                    columnSpacing: Kirigami.Units.largeSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.largeSpacing
 
-                    QQC2.Label {
-                        text: i18n("Name:")
-                    }
-                    QQC2.TextField {
+                    GridLayout {
                         Layout.fillWidth: true
-                        text: card.name
-                        placeholderText: i18n("Shown in the shortcuts list")
-                        onTextEdited: {
-                            apps.setProperty(card.index, "name", text)
-                            root.commit()
+                        columns: 4
+                        columnSpacing: Kirigami.Units.largeSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        QQC2.Label {
+                            text: i18n("Name:")
                         }
-                    }
-                    QQC2.Label {
-                        text: i18n("Shortcut:")
-                    }
-                    RowLayout {
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: card.name
+                            placeholderText: i18n("Shown in the shortcuts list")
+                            onTextEdited: {
+                                apps.setProperty(card.index, "name", text)
+                                root.commit()
+                            }
+                        }
+                        QQC2.Label {
+                            text: i18n("Shortcut:")
+                        }
                         KQuickControls.KeySequenceItem {
                             id: recorder
                             keySequence: kcm.toSequence(card.shortcut)
@@ -146,52 +154,48 @@ KCM.SimpleKCM {
                                 root.commit()
                             }
                         }
-                        QQC2.ToolButton {
-                            icon.name: "list-remove"
-                            text: i18n("Remove")
-                            display: QQC2.AbstractButton.IconOnly
-                            QQC2.ToolTip.text: text
-                            QQC2.ToolTip.visible: hovered
-                            onClicked: {
-                                apps.remove(card.index)
+
+                        QQC2.Label {
+                            text: i18n("Window class:")
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            QQC2.TextField {
+                                Layout.fillWidth: true
+                                text: card.windowClass
+                                placeholderText: i18n("Matched as a case-insensitive substring")
+                                onTextEdited: {
+                                    apps.setProperty(card.index, "windowClass", text)
+                                    root.commit()
+                                }
+                            }
+                            QQC2.Button {
+                                icon.name: "edit-find"
+                                text: i18n("Detect Window…")
+                                QQC2.ToolTip.text: i18n("Click a window to fill in its class")
+                                QQC2.ToolTip.visible: hovered
+                                onClicked: kcm.detectWindow(String(card.uid))
+                            }
+                        }
+                        QQC2.Label {
+                            text: i18n("Title contains:")
+                        }
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: card.caption
+                            placeholderText: i18n("Optional")
+                            onTextEdited: {
+                                apps.setProperty(card.index, "caption", text)
                                 root.commit()
                             }
                         }
                     }
 
-                    QQC2.Label {
-                        text: i18n("Window class:")
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        QQC2.TextField {
-                            Layout.fillWidth: true
-                            text: card.windowClass
-                            placeholderText: i18n("Matched as a case-insensitive substring")
-                            onTextEdited: {
-                                apps.setProperty(card.index, "windowClass", text)
-                                root.commit()
-                            }
-                        }
-                        QQC2.Button {
-                            icon.name: "edit-find"
-                            text: i18n("Detect Window…")
-                            QQC2.ToolTip.text: i18n("Click a window to fill in its class")
-                            QQC2.ToolTip.visible: hovered
-                            onClicked: kcm.detectWindow(String(card.uid))
-                        }
-                    }
-                    QQC2.Label {
-                        text: i18n("Title contains:")
-                    }
-                    QQC2.TextField {
-                        Layout.fillWidth: true
-                        text: card.caption
-                        placeholderText: i18n("Optional")
-                        onTextEdited: {
-                            apps.setProperty(card.index, "caption", text)
-                            root.commit()
-                        }
+                    QQC2.Button {
+                        Layout.alignment: Qt.AlignVCenter
+                        icon.name: "edit-delete"
+                        text: i18n("Remove")
+                        onClicked: root.removeApplication(card.index)
                     }
                 }
             }

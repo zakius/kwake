@@ -103,7 +103,7 @@ unknown properties made fatal, and the shell scripts through ShellCheck.
 
 Local runs need `clazy`, `shellcheck`, `nodejs`, `qt6-declarative-dev-tools`
 and the QML modules the form imports, as listed in
-`.github/workflows/build.yml`.
+the checks job in `.github/workflows/build.yml`.
 
 ## Licence
 
