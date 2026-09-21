@@ -20,11 +20,12 @@ KDE Plasma 6. Nothing else is needed for the script itself.
 Ubuntu 24.04 ships Plasma 5, which is not supported; Ubuntu releases with
 Plasma 6 start at 25.04.
 
-### 2. Settings page build tools (optional)
+### 2. Build tools (only for `--build`)
 
-The settings page is a compiled plugin, so building it needs a compiler and
-the Qt and KDE development packages. Skip this step if you are fine editing
-the settings as plain text instead.
+The installer downloads the settings page prebuilt for x86_64 and ARM64, so
+most installs skip this step. It is only needed to build the settings page
+yourself with `./install.sh --build`, for another CPU type or to try changes
+that are not released yet.
 
 Debian and Ubuntu:
 
@@ -53,8 +54,18 @@ cd kwin-toggle-windows
 ./install.sh
 ```
 
-This builds the settings page and asks for root to place it in Qt's plugin
-directory. Everything else is installed for your user only.
+This downloads the settings page for your CPU from the latest GitHub release,
+checks it against the release's `SHA256SUMS`, and asks for root to place it
+next to KWin's own plugins. Everything else is installed for your user only.
+A checkout of a release tag gets that release's settings page instead of the
+latest. Downloads go through `gh` when it is installed and logged in, which a
+private repository needs, and through `curl` otherwise.
+
+To build the settings page from this checkout instead:
+
+```sh
+./install.sh --build
+```
 
 Without the settings page, install with:
 
@@ -113,7 +124,8 @@ It targets KWin 6.
 The settings page is a QML form in a small compiled plugin. The plugin links
 against Qt 6 and KDE Frameworks 6 but no KWin library, so Plasma and KWin
 updates cannot break it. Qt and KDE Frameworks both keep ABI stable across a
-major version, so it keeps working through 6.x updates. A future Qt 7 and
+major version, so it keeps working through 6.x updates. Release builds load on
+any system with Qt 6.8 and KDE Frameworks 6.13 or newer. A future Qt 7 and
 Frameworks 7 transition would need a rebuild, and until then
 `install.sh --script-only` gives you the text editor fallback.
 
@@ -123,15 +135,32 @@ Frameworks 7 transition would need a rebuild, and until then
 ./check.sh
 ```
 
-CI runs this same script. The C++ goes through
-[clazy](https://invent.kde.org/sdk/clazy), KDE's Qt-aware static analyser,
-with warnings as errors, which catches Qt lifetime mistakes such as a lambda
-connected without a context object. The QML goes through `qmllint` with
-unknown properties made fatal, and the shell scripts through ShellCheck.
+It lints everything except the C++: `qmllint` on the QML with unknown
+properties made fatal, ShellCheck on the scripts, and the metadata the settings
+page depends on. CI runs this same script on Arch, whose current Qt gives
+`qmllint` the type information it needs; the tools are listed in the lint job
+in `.github/workflows/build.yml`.
 
-Local runs need `clazy`, `shellcheck`, `nodejs`, `qt6-declarative-dev-tools`
-and the QML modules the form imports, as listed in
-the checks job in `.github/workflows/build.yml`.
+The C++ is checked while it compiles. `ci/build-plugin.sh` builds the settings
+page with [clazy](https://invent.kde.org/sdk/clazy), KDE's Qt-aware static
+analyser, as the compiler and warnings as errors, which catches Qt lifetime
+mistakes such as a lambda connected without a context object. Those are the
+binaries that ship. To run it locally:
+
+```sh
+podman run --rm -v "$PWD":/src -w /src debian:trixie bash ci/build-plugin.sh
+```
+
+## Releases
+
+```sh
+git tag -a v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
+```
+
+CI builds the settings page on Debian 13 for x86_64 and ARM64, loads each
+build on Debian 13, Ubuntu 26.04 and Fedora 44, and publishes a GitHub release
+with both plugins and `SHA256SUMS` only if every check and load test passes.
 
 ## Licence
 
