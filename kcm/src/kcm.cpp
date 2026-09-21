@@ -6,275 +6,121 @@
 
         Name | resourceClass | caption | shortcut
 
-    This KCM is only an editor for that string. The script itself reacts to
-    KWin's reconfigure signal, so saving here applies immediately: no reload,
-    no logout.
+    The form lives in ui/main.qml, which parses and serialises that string.
+    This class only loads and saves it, and runs the window picker, which QML
+    cannot reach on its own because it needs D-Bus.
 */
 
-#include <KCModule>
 #include <KConfigGroup>
-#include <KKeySequenceWidget>
-#include <KLocalizedString>
 #include <KPluginFactory>
+#include <KQuickConfigModule>
 #include <KSharedConfig>
 
 #include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusPendingCallWatcher>
 #include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QFrame>
-#include <QGridLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QScrollArea>
-#include <QToolButton>
-#include <QVBoxLayout>
+#include <QKeySequence>
+
+using namespace Qt::StringLiterals;
 
 namespace
 {
-const QString kConfigGroup = QStringLiteral("Script-toggle_windows");
-const QString kConfigKey = QStringLiteral("Entries");
-const QString kFieldSeparator = QStringLiteral(" | ");
-
-// A separator or newline typed into a field would split it into bogus entries.
-QString sanitised(const QString &field)
-{
-    QString clean = field;
-    clean.remove(QLatin1Char('|'));
-    clean.remove(QLatin1Char('\n'));
-    return clean.trimmed();
-}
+constexpr auto kConfigFile = "kwinrc"_L1;
+constexpr auto kConfigGroup = "Script-toggle_windows"_L1;
+constexpr auto kConfigKey = "Entries"_L1;
 }
 
-// One application: the fields the script matches on, plus its shortcut.
-class EntryRow : public QFrame
+class ToggleWindowsKCM : public KQuickConfigModule
 {
     Q_OBJECT
-
-public:
-    explicit EntryRow(QWidget *parent = nullptr)
-        : QFrame(parent)
-    {
-        setFrameShape(QFrame::StyledPanel);
-
-        m_name = new QLineEdit(this);
-        m_name->setPlaceholderText(i18n("Shown in the shortcuts list"));
-        m_windowClass = new QLineEdit(this);
-        m_windowClass->setPlaceholderText(i18n("Matched as a case-insensitive substring"));
-        m_caption = new QLineEdit(this);
-        m_caption->setPlaceholderText(i18n("Optional, narrows the match by window title"));
-
-        m_shortcut = new KKeySequenceWidget(this);
-        m_shortcut->setCheckForConflictsAgainst(KKeySequenceWidget::GlobalShortcuts);
-
-        auto *detect = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-find")), i18n("Detect Window…"), this);
-        detect->setToolTip(i18n("Click a window to fill in its class and title"));
-
-        auto *remove = new QToolButton(this);
-        remove->setIcon(QIcon::fromTheme(QStringLiteral("list-remove")));
-        remove->setToolTip(i18n("Remove this application"));
-
-        auto *layout = new QGridLayout(this);
-        layout->addWidget(new QLabel(i18n("Name:"), this), 0, 0);
-        layout->addWidget(m_name, 0, 1);
-        layout->addWidget(new QLabel(i18n("Shortcut:"), this), 0, 2);
-        layout->addWidget(m_shortcut, 0, 3);
-        layout->addWidget(remove, 0, 4);
-        layout->addWidget(new QLabel(i18n("Window class:"), this), 1, 0);
-        layout->addWidget(m_windowClass, 1, 1);
-        layout->addWidget(new QLabel(i18n("Title contains:"), this), 1, 2);
-        layout->addWidget(m_caption, 1, 3);
-        layout->addWidget(detect, 2, 1, 1, 1, Qt::AlignLeft);
-        // The two text fields carry the width; the shortcut recorder only needs
-        // enough room for a combination, not an equal share of the row.
-        layout->setColumnStretch(1, 3);
-        layout->setColumnStretch(3, 2);
-
-        connect(remove, &QToolButton::clicked, this, [this] {
-            Q_EMIT removeRequested(this);
-        });
-        connect(detect, &QPushButton::clicked, this, &EntryRow::detectWindow);
-        connect(m_name, &QLineEdit::textChanged, this, &EntryRow::changed);
-        connect(m_windowClass, &QLineEdit::textChanged, this, &EntryRow::changed);
-        connect(m_caption, &QLineEdit::textChanged, this, &EntryRow::changed);
-        connect(m_shortcut, &KKeySequenceWidget::keySequenceChanged, this, &EntryRow::changed);
-    }
-
-    void setEntry(const QStringList &fields)
-    {
-        m_name->setText(fields.value(0));
-        m_windowClass->setText(fields.value(1));
-        m_caption->setText(fields.value(2));
-        // NoValidate: the stored sequence is already registered under this
-        // entry's own name, so validating it here reports a conflict with itself.
-        m_shortcut->setKeySequence(QKeySequence::fromString(fields.value(3)),
-                                   KKeySequenceWidget::NoValidate);
-    }
-
-    // Empty means "no entry"; the script skips nameless lines anyway.
-    bool isEmpty() const
-    {
-        return m_name->text().trimmed().isEmpty();
-    }
-
-    QString toLine() const
-    {
-        return QStringList{
-            sanitised(m_name->text()),
-            sanitised(m_windowClass->text()),
-            sanitised(m_caption->text()),
-            m_shortcut->keySequence().toString(QKeySequence::PortableText),
-        }.join(kFieldSeparator);
-    }
-
-Q_SIGNALS:
-    void changed();
-    void removeRequested(EntryRow *row);
-
-private:
-    // The same picker KWin Rules uses: KWin takes over the pointer until a
-    // window is clicked, then hands back that window's properties.
-    void detectWindow()
-    {
-        QDBusInterface kwin(QStringLiteral("org.kde.KWin"),
-                            QStringLiteral("/KWin"),
-                            QStringLiteral("org.kde.KWin"),
-                            QDBusConnection::sessionBus());
-        auto *watcher = new QDBusPendingCallWatcher(kwin.asyncCall(QStringLiteral("queryWindowInfo")), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *call) {
-            call->deleteLater();
-            const QDBusPendingReply<QVariantMap> reply = *call;
-            if (reply.isError()) {
-                return; // the user pressed Escape
-            }
-            const QVariantMap info = reply.value();
-            const QString resourceClass = info.value(QStringLiteral("resourceClass")).toString();
-            m_windowClass->setText(resourceClass);
-            if (m_name->text().trimmed().isEmpty()) {
-                m_name->setText(resourceClass);
-            }
-        });
-    }
-
-    QLineEdit *m_name;
-    QLineEdit *m_windowClass;
-    QLineEdit *m_caption;
-    KKeySequenceWidget *m_shortcut;
-};
-
-class ToggleWindowsKCM : public KCModule
-{
-    Q_OBJECT
+    Q_PROPERTY(QString entries READ entries WRITE setEntries NOTIFY entriesChanged)
 
 public:
     ToggleWindowsKCM(QObject *parent, const KPluginMetaData &data)
-        : KCModule(parent, data)
+        : KQuickConfigModule(parent, data)
     {
-        auto *outer = new QVBoxLayout(widget());
+        setButtons(Apply | Default);
+    }
 
-        auto *help = new QLabel(i18n("Each application gets a global shortcut that raises it, or minimises it "
-                                     "again if it is already focused. Window class and title are matched as "
-                                     "case-insensitive substrings; leave the title empty to match on class alone."),
-                                widget());
-        help->setWordWrap(true);
-        outer->addWidget(help);
+    QString entries() const
+    {
+        return m_entries;
+    }
 
-        m_rowContainer = new QWidget;
-        m_rowLayout = new QVBoxLayout(m_rowContainer);
-        m_rowLayout->setContentsMargins(0, 0, 0, 0);
-        m_rowLayout->addStretch();
-
-        auto *scroll = new QScrollArea(widget());
-        scroll->setWidget(m_rowContainer);
-        scroll->setWidgetResizable(true);
-        scroll->setFrameShape(QFrame::NoFrame);
-        outer->addWidget(scroll, 1);
-
-        auto *add = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), i18n("Add Application"), widget());
-        connect(add, &QPushButton::clicked, this, [this] {
-            addRow({});
-            markAsChanged();
-        });
-        outer->addWidget(add, 0, Qt::AlignLeft);
+    void setEntries(const QString &entries)
+    {
+        if (m_entries == entries) {
+            return;
+        }
+        m_entries = entries;
+        Q_EMIT entriesChanged();
+        setNeedsSave(m_entries != m_saved);
+        setRepresentsDefaults(m_entries.isEmpty());
     }
 
     void load() override
     {
-        const QString stored = KSharedConfig::openConfig(QStringLiteral("kwinrc"))
-                                   ->group(kConfigGroup)
-                                   .readEntry(kConfigKey, QString());
-
-        qDeleteAll(m_rows);
-        m_rows.clear();
-
-        const QStringList lines = stored.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        for (const QString &line : lines) {
-            QStringList fields;
-            const QStringList raw = line.split(QLatin1Char('|'));
-            for (const QString &field : raw) {
-                fields.append(field.trimmed());
-            }
-            if (fields.value(0).isEmpty()) {
-                continue;
-            }
-            addRow(fields);
-        }
+        m_saved = KSharedConfig::openConfig(kConfigFile)->group(kConfigGroup).readEntry(kConfigKey, QString());
+        setEntries(m_saved);
         setNeedsSave(false);
     }
 
     void save() override
     {
-        QStringList lines;
-        for (EntryRow *row : std::as_const(m_rows)) {
-            if (!row->isEmpty()) {
-                lines.append(row->toLine());
-            }
-        }
-
-        auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
-        config->group(kConfigGroup).writeEntry(kConfigKey, lines.join(QLatin1Char('\n')));
+        auto config = KSharedConfig::openConfig(kConfigFile);
+        config->group(kConfigGroup).writeEntry(kConfigKey, m_entries);
         config->sync();
+        m_saved = m_entries;
+        setNeedsSave(false);
 
         // The script listens for this and re-registers shortcuts in place.
-        QDBusConnection::sessionBus().call(
-            QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
-                                           QStringLiteral("/KWin"),
-                                           QStringLiteral("org.kde.KWin"),
-                                           QStringLiteral("reconfigure")),
-            QDBus::NoBlock);
-
-        setNeedsSave(false);
+        QDBusConnection::sessionBus().send(
+            QDBusMessage::createMethodCall(u"org.kde.KWin"_s, u"/KWin"_s, u"org.kde.KWin"_s, u"reconfigure"_s));
     }
 
     void defaults() override
     {
-        qDeleteAll(m_rows);
-        m_rows.clear();
-        markAsChanged();
+        setEntries(QString());
     }
 
-private:
-    void addRow(const QStringList &fields)
+    // QML has no value type for QKeySequence, so the shortcut recorder can only
+    // be fed and read through these.
+    Q_INVOKABLE QKeySequence toSequence(const QString &text) const
     {
-        auto *row = new EntryRow(m_rowContainer);
-        row->setEntry(fields);
-        // Keep the trailing stretch last so rows stack from the top.
-        m_rowLayout->insertWidget(m_rowLayout->count() - 1, row);
-        m_rows.append(row);
+        return QKeySequence::fromString(text, QKeySequence::PortableText);
+    }
 
-        connect(row, &EntryRow::changed, this, &ToggleWindowsKCM::markAsChanged);
-        connect(row, &EntryRow::removeRequested, this, [this](EntryRow *victim) {
-            m_rows.removeOne(victim);
-            victim->deleteLater();
-            markAsChanged();
+    Q_INVOKABLE QString toText(const QKeySequence &sequence) const
+    {
+        return sequence.toString(QKeySequence::PortableText);
+    }
+
+    // The same picker KWin Rules uses: KWin takes over the pointer until a
+    // window is clicked. The answer comes back tagged with requestId rather
+    // than aimed at a QML object, because the row that asked may have been
+    // removed by the time the user clicks.
+    Q_INVOKABLE void detectWindow(const QString &requestId)
+    {
+        const auto message = QDBusMessage::createMethodCall(u"org.kde.KWin"_s, u"/KWin"_s, u"org.kde.KWin"_s, u"queryWindowInfo"_s);
+        auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, requestId](QDBusPendingCallWatcher *call) {
+            call->deleteLater();
+            const QDBusPendingReply<QVariantMap> reply = *call;
+            if (reply.isError()) {
+                return; // the user pressed Escape
+            }
+            Q_EMIT windowDetected(requestId, reply.value().value(u"resourceClass"_s).toString());
         });
     }
 
-    QWidget *m_rowContainer;
-    QVBoxLayout *m_rowLayout;
-    QList<EntryRow *> m_rows;
+Q_SIGNALS:
+    void entriesChanged();
+    void windowDetected(const QString &requestId, const QString &resourceClass);
+
+private:
+    QString m_entries;
+    QString m_saved;
 };
 
 K_PLUGIN_CLASS_WITH_JSON(ToggleWindowsKCM, "metadata.json")

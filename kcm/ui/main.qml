@@ -1,0 +1,212 @@
+/*
+    The Toggle Windows settings form. One row per application, kept in a
+    ListModel and written back to kcm.entries as the line format the script
+    reads: Name | resourceClass | caption | shortcut
+*/
+
+import QtQuick
+import QtQuick.Controls as QQC2
+import QtQuick.Layouts
+import org.kde.kcmutils as KCM
+import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrols as KQuickControls
+
+KCM.SimpleKCM {
+    id: root
+
+    // Rows are matched to Detect Window answers by uid, never by index, since
+    // rows can be added or removed while the picker is open.
+    property int nextUid: 0
+    // The last value this form wrote. Echoes of it are ignored, so typing never
+    // rebuilds the model and steals focus from the field being edited.
+    property string written: ""
+
+    ListModel {
+        id: apps
+    }
+
+    // A separator or newline typed into a field would split it into bogus entries.
+    function clean(text) {
+        return text.replace(/[|\n]/g, "").trim()
+    }
+
+    function parse(text) {
+        apps.clear()
+        text.split("\n").forEach(line => {
+            const fields = line.split("|").map(field => field.trim())
+            if (!fields[0]) {
+                return
+            }
+            apps.append({
+                uid: nextUid++,
+                name: fields[0],
+                windowClass: fields[1] ?? "",
+                caption: fields[2] ?? "",
+                shortcut: fields[3] ?? "",
+            })
+        })
+    }
+
+    function commit() {
+        const lines = []
+        for (let i = 0; i < apps.count; ++i) {
+            const app = apps.get(i)
+            if (clean(app.name)) {
+                lines.push([clean(app.name), clean(app.windowClass), clean(app.caption), app.shortcut].join(" | "))
+            }
+        }
+        written = lines.join("\n")
+        kcm.entries = written
+    }
+
+    function addApplication() {
+        apps.append({ uid: nextUid++, name: "", windowClass: "", caption: "", shortcut: "" })
+    }
+
+    Component.onCompleted: parse(kcm.entries)
+
+    Connections {
+        target: kcm
+
+        // load() and defaults() replace the whole value; the form's own writes come back here too.
+        function onEntriesChanged() {
+            if (kcm.entries !== root.written) {
+                root.written = kcm.entries
+                root.parse(kcm.entries)
+            }
+        }
+
+        function onWindowDetected(requestId, resourceClass) {
+            for (let i = 0; i < apps.count; ++i) {
+                if (String(apps.get(i).uid) !== requestId) {
+                    continue
+                }
+                apps.setProperty(i, "windowClass", resourceClass)
+                if (!clean(apps.get(i).name)) {
+                    apps.setProperty(i, "name", resourceClass)
+                }
+                root.commit()
+                return
+            }
+        }
+    }
+
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
+
+        QQC2.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: i18n("Each application gets a global shortcut that raises it, or minimises it again if it already has focus. Window class and title are case-insensitive substring matches; leave the title empty to match on class alone.")
+        }
+
+        Repeater {
+            model: apps
+
+            delegate: Kirigami.AbstractCard {
+                id: card
+
+                required property int index
+                required property int uid
+                required property string name
+                required property string windowClass
+                required property string caption
+                required property string shortcut
+
+                Layout.fillWidth: true
+
+                contentItem: GridLayout {
+                    columns: 4
+                    columnSpacing: Kirigami.Units.largeSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    QQC2.Label {
+                        text: i18n("Name:")
+                    }
+                    QQC2.TextField {
+                        Layout.fillWidth: true
+                        text: card.name
+                        placeholderText: i18n("Shown in the shortcuts list")
+                        onTextEdited: {
+                            apps.setProperty(card.index, "name", text)
+                            root.commit()
+                        }
+                    }
+                    QQC2.Label {
+                        text: i18n("Shortcut:")
+                    }
+                    RowLayout {
+                        KQuickControls.KeySequenceItem {
+                            id: recorder
+                            keySequence: kcm.toSequence(card.shortcut)
+                            onKeySequenceModified: {
+                                apps.setProperty(card.index, "shortcut", kcm.toText(recorder.keySequence))
+                                root.commit()
+                            }
+                        }
+                        QQC2.ToolButton {
+                            icon.name: "list-remove"
+                            text: i18n("Remove")
+                            display: QQC2.AbstractButton.IconOnly
+                            QQC2.ToolTip.text: text
+                            QQC2.ToolTip.visible: hovered
+                            onClicked: {
+                                apps.remove(card.index)
+                                root.commit()
+                            }
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: i18n("Window class:")
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: card.windowClass
+                            placeholderText: i18n("Matched as a case-insensitive substring")
+                            onTextEdited: {
+                                apps.setProperty(card.index, "windowClass", text)
+                                root.commit()
+                            }
+                        }
+                        QQC2.Button {
+                            icon.name: "edit-find"
+                            text: i18n("Detect Window…")
+                            QQC2.ToolTip.text: i18n("Click a window to fill in its class")
+                            QQC2.ToolTip.visible: hovered
+                            onClicked: kcm.detectWindow(String(card.uid))
+                        }
+                    }
+                    QQC2.Label {
+                        text: i18n("Title contains:")
+                    }
+                    QQC2.TextField {
+                        Layout.fillWidth: true
+                        text: card.caption
+                        placeholderText: i18n("Optional")
+                        onTextEdited: {
+                            apps.setProperty(card.index, "caption", text)
+                            root.commit()
+                        }
+                    }
+                }
+            }
+        }
+
+        Kirigami.PlaceholderMessage {
+            Layout.fillWidth: true
+            visible: apps.count === 0
+            icon.name: "preferences-system-windows"
+            text: i18n("No applications yet")
+            explanation: i18n("Add one to give it a toggle shortcut.")
+        }
+
+        QQC2.Button {
+            icon.name: "list-add"
+            text: i18n("Add Application")
+            onClicked: root.addApplication()
+        }
+    }
+}

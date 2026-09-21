@@ -45,13 +45,17 @@ fi
 
 echo "==> Removing files"
 rm -rf "$SCRIPT_DIR"
-plugin="$PREFIX/lib/$(uname -m)-linux-gnu/qt6/plugins/kwin/effects/configs/libkcm_toggle_windows.so"
-[[ -e "$plugin" ]] || plugin="$PREFIX/lib64/qt6/plugins/kwin/effects/configs/libkcm_toggle_windows.so"
-[[ -e "$plugin" ]] || plugin="$PREFIX/lib/qt6/plugins/kwin/effects/configs/libkcm_toggle_windows.so"
-if [[ -e "$plugin" ]]; then
+plugin_dirs=("$PREFIX/lib/$(uname -m)-linux-gnu/qt6/plugins" "$PREFIX/lib64/qt6/plugins" "$PREFIX/lib/qt6/plugins")
+for qtpaths in qtpaths6 qtpaths; do
+    if have "$qtpaths"; then plugin_dirs=("$("$qtpaths" --query QT_INSTALL_PLUGINS)" "${plugin_dirs[@]}"); break; fi
+done
+for dir in "${plugin_dirs[@]}"; do
+    plugin="$dir/kwin/effects/configs/kcm_toggle_windows.so"
+    [[ -e "$plugin" ]] || continue
     if [[ -w "$(dirname "$plugin")" ]]; then rm -f "$plugin"; else sudo rm -f "$plugin"; fi
     echo "    removed $plugin"
-fi
+    break
+done
 
 if have kwriteconfig6; then
     kwriteconfig6 --file kwinrc --group Plugins --key toggle_windowsEnabled --delete

@@ -7,6 +7,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  checks:
+    name: Static checks (clazy, qmllint, shellcheck)
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake extra-cmake-modules clazy \
+            qt6-base-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-dev-tools \
+            libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev \
+            qml6-module-org-kde-kirigami qml6-module-org-kde-kcmutils \
+            qml6-module-org-kde-kquickcontrols qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts \
+            nodejs python3 shellcheck
+
+      - name: Run checks
+        run: ./check.sh
+
   settings-page:
     name: Settings page (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -33,17 +55,16 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential cmake \
-            qt6-base-dev qt6-base-dev-tools \
-            libkf6coreaddons-dev libkf6config-dev libkf6configwidgets-dev \
-            libkf6i18n-dev libkf6kcmutils-dev libkf6xmlgui-dev
+            build-essential cmake extra-cmake-modules \
+            qt6-base-dev qt6-declarative-dev \
+            libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev
 
       - name: Install build dependencies (arch)
         if: startsWith(matrix.image, 'archlinux')
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel cmake qt6-base kcoreaddons kconfig kconfigwidgets \
-            ki18n kcmutils kxmlgui
+            base-devel cmake extra-cmake-modules qt6-base qt6-declarative \
+            kcoreaddons kconfig kcmutils
 
       - name: Build
         run: |
@@ -54,26 +75,6 @@ jobs:
         if: matrix.artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libkcm_toggle_windows-debian-trixie
-          path: kcm/build/libkcm_toggle_windows.so
+          name: kcm_toggle_windows-debian-trixie
+          path: kcm/build/bin/kwin/effects/configs/kcm_toggle_windows.so
           if-no-files-found: error
-
-  script:
-    name: KWin script
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Check JavaScript syntax
-        run: node --check script/contents/code/main.js
-
-      - name: Check JSON and XML are well formed
-        run: |
-          python3 -m json.tool script/metadata.json > /dev/null
-          python3 -m json.tool kcm/src/metadata.json > /dev/null
-          python3 -c "import xml.dom.minidom as m; m.parse('script/contents/config/main.xml'); m.parse('script/contents/ui/config.ui')"
-
-      - name: Check shell scripts
-        run: |
-          sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck install.sh uninstall.sh

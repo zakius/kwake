@@ -25,9 +25,9 @@ root to place it in Qt's plugin directory. Everything else is user-local.
 Build dependencies on Debian and derivatives:
 
 ```sh
-sudo apt install build-essential cmake qt6-base-dev \
-    libkf6coreaddons-dev libkf6config-dev libkf6configwidgets-dev \
-    libkf6i18n-dev libkf6kcmutils-dev libkf6xmlgui-dev
+sudo apt install build-essential cmake extra-cmake-modules \
+    qt6-base-dev qt6-declarative-dev \
+    libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev
 ```
 
 To skip the compiled page and use a plain text editor for the same settings:
@@ -82,12 +82,28 @@ The settings page is only an editor for that value, which is why
 The script half is plain JavaScript and depends only on KWin's scripting API.
 It targets KWin 6.
 
-The settings page is compiled against Qt 6 and KDE Frameworks 6, and links
-against no KWin library at all, so Plasma and KWin updates cannot break it. Qt
-and KDE Frameworks both keep ABI stable across a major version, so it keeps
-working through 6.x updates. A future Qt 7 and Frameworks 7 transition would
-need a rebuild, and until then `install.sh --script-only` gives you the text
-editor fallback.
+The settings page is a QML form in a small compiled plugin. The plugin links
+against Qt 6 and KDE Frameworks 6 but no KWin library, so Plasma and KWin
+updates cannot break it. Qt and KDE Frameworks both keep ABI stable across a
+major version, so it keeps working through 6.x updates. A future Qt 7 and
+Frameworks 7 transition would need a rebuild, and until then
+`install.sh --script-only` gives you the text editor fallback.
+
+## Checks
+
+```sh
+./check.sh
+```
+
+CI runs this same script. The C++ goes through
+[clazy](https://invent.kde.org/sdk/clazy), KDE's Qt-aware static analyser,
+with warnings as errors, which catches Qt lifetime mistakes such as a lambda
+connected without a context object. The QML goes through `qmllint` with
+unknown properties made fatal, and the shell scripts through ShellCheck.
+
+Local runs need `clazy`, `shellcheck`, `nodejs`, `qt6-declarative-dev-tools`
+and the QML modules the form imports, as listed in
+`.github/workflows/build.yml`.
 
 ## Licence
 
