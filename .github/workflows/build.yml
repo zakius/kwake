@@ -27,23 +27,16 @@ jobs:
 
   plugin:
     name: Plugin (Debian 13, ${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    # Each architecture builds natively on its own runner.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v5
 
-      # Native ARM runners are not reliably available to private repositories,
-      # and a job waiting for one never fails, it just hangs; emulate instead.
-      - name: Set up ARM emulation
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Build
-        run: docker run --rm --platform linux/${{ matrix.arch }} -v "$PWD":/src -w /src debian:trixie bash ci/build-plugin.sh
+        run: docker run --rm -v "$PWD":/src -w /src debian:trixie bash ci/build-plugin.sh
 
       - uses: actions/upload-artifact@v4
         with:
@@ -54,7 +47,7 @@ jobs:
   load-test:
     name: Loads on ${{ matrix.image }} (${{ matrix.arch }})
     needs: plugin
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -63,19 +56,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up ARM emulation
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - uses: actions/download-artifact@v4
         with:
           name: plugin-${{ matrix.arch }}
           path: dist
 
       - name: Load the plugin
-        run: docker run --rm --platform linux/${{ matrix.arch }} -v "$PWD":/src -w /src ${{ matrix.image }} bash ci/load-test.sh
+        run: docker run --rm -v "$PWD":/src -w /src ${{ matrix.image }} bash ci/load-test.sh
 
   latest-frameworks:
     name: Builds against current KDE Frameworks (Arch)
