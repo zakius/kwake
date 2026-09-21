@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -19,59 +20,97 @@ jobs:
       - name: Install tools
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel cmake extra-cmake-modules clazy qt6-base qt6-declarative \
-            kcoreaddons kconfig kcmutils kirigami kdeclarative \
-            nodejs python shellcheck
+            base-devel cmake extra-cmake-modules clazy qt6-base qt6-declarative kcoreaddons kconfig kcmutils kirigami kdeclarative nodejs python shellcheck
 
       - name: Run checks
         run: ./check.sh
 
-  settings-page:
-    name: Settings page (${{ matrix.name }})
+  plugin:
+    name: Plugin (Debian 13, ${{ matrix.arch }})
     runs-on: ubuntu-latest
-    container: ${{ matrix.image }}
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          # The oldest KDE Frameworks 6 stack in use. A plugin built against it
-          # also loads on newer 6.x releases, so this artifact reaches furthest.
-          - name: debian trixie
-            image: debian:trixie
-            artifact: true
-          # Arch tracks KDE Frameworks closely, so this job is the early warning
-          # for a framework change that breaks the build.
-          - name: arch
-            image: archlinux:latest
-            artifact: false
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install build dependencies (debian)
-        if: startsWith(matrix.image, 'debian')
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential cmake extra-cmake-modules \
-            qt6-base-dev qt6-declarative-dev \
-            libkf6coreaddons-dev libkf6config-dev libkf6kcmutils-dev
+      # Native ARM runners are not reliably available to private repositories,
+      # and a job waiting for one never fails, it just hangs; emulate instead.
+      - name: Set up ARM emulation
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
-      - name: Install build dependencies (arch)
-        if: startsWith(matrix.image, 'archlinux')
-        run: |
-          pacman -Syu --noconfirm --needed \
-            base-devel cmake extra-cmake-modules qt6-base qt6-declarative \
-            kcoreaddons kconfig kcmutils
+      - name: Build
+        run: docker run --rm --platform linux/${{ matrix.arch }} -v "$PWD":/src -w /src debian:trixie bash ci/build-plugin.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.arch }}
+          path: dist/*.so
+          if-no-files-found: error
+
+  load-test:
+    name: Loads on ${{ matrix.image }} (${{ matrix.arch }})
+    needs: plugin
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        image: ["debian:trixie", "ubuntu:26.04", "fedora:44"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up ARM emulation
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-${{ matrix.arch }}
+          path: dist
+
+      - name: Load the plugin
+        run: docker run --rm --platform linux/${{ matrix.arch }} -v "$PWD":/src -w /src ${{ matrix.image }} bash ci/load-test.sh
+
+  latest-frameworks:
+    name: Builds against current KDE Frameworks (Arch)
+    runs-on: ubuntu-latest
+    # Early warning for a framework change that breaks the build.
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Build
         run: |
-          cmake -S kcm -B kcm/build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+          pacman -Syu --noconfirm --needed base-devel cmake extra-cmake-modules qt6-base qt6-declarative kcoreaddons kconfig kcmutils
+          cmake -S kcm -B kcm/build -DCMAKE_BUILD_TYPE=Release
           cmake --build kcm/build --parallel
 
-      - name: Upload plugin
-        if: matrix.artifact
-        uses: actions/upload-artifact@v4
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [checks, load-test, latest-frameworks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          name: toggle_windows-kcm-debian-trixie
-          path: kcm/build/bin/kwin/effects/configs/toggle_windows.so
-          if-no-files-found: error
+          pattern: plugin-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum -- *.so > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
+            -- *.so SHA256SUMS

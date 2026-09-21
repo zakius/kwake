@@ -38,12 +38,17 @@ expected = "kwin/effects/configs/" + meta["KPlugin"]["Id"]
 actual = meta.get("X-KDE-ConfigModule")
 if actual != expected:
     raise SystemExit(f"script/metadata.json: X-KDE-ConfigModule is {actual!r}, must be {expected!r}")
+# install.sh installs the prebuilt plugin under this name.
+import re
+found = re.search(r'^PLUGIN_ID="([^"]+)"', open("install.sh").read(), re.M)
+if not found or found.group(1) != meta["KPlugin"]["Id"]:
+    raise SystemExit(f"install.sh: PLUGIN_ID must be {meta['KPlugin']['Id']!r}")
 PY
 python3 -c "import sys, xml.dom.minidom as m; [m.parse(f) for f in sys.argv[1:]]" \
     script/contents/config/main.xml script/contents/ui/config.ui
 
 echo "==> Shell scripts"
-shellcheck install.sh uninstall.sh check.sh
+shellcheck install.sh uninstall.sh check.sh ci/*.sh
 
 echo "==> QML (qmllint)"
 # kcm and i18n are provided by the settings host at runtime, so qmllint cannot
