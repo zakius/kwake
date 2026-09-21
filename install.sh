@@ -5,12 +5,8 @@ set -euo pipefail
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/toggle_windows"
 REPO="zakius/kwin-toggle-windows"
-# Must match KPlugin.Id in script/metadata.json; the settings host looks the
-# plugin up by that name.
-PLUGIN_ID="toggle_windows"
-# Only used with --build. Qt only searches its own plugin directory, so
-# /usr/local will not be found.
-PREFIX="/usr"
+# The settings host looks the plugin up by the script's id.
+PLUGIN_ID=$(sed -n 's/.*"Id": *"\([^"]*\)".*/\1/p' "$SOURCE_DIR/script/metadata.json")
 SETTINGS_PAGE="prebuilt"
 
 usage() {
@@ -24,8 +20,6 @@ ARM64), from the project's GitHub releases.
                   the build tools listed in the README.
   --script-only   Skip the settings page; the settings open as a plain text
                   editor instead.
-  --prefix DIR    With --build, install the settings page under DIR
-                  (default: /usr). Must be a directory Qt searches for plugins.
   -h, --help      Show this message.
 USAGE
 }
@@ -34,7 +28,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --build) SETTINGS_PAGE="build"; shift ;;
         --script-only) SETTINGS_PAGE="none"; shift ;;
-        --prefix) PREFIX="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
@@ -89,11 +82,7 @@ install_prebuilt() {
 
     dest=$(kwin_plugin_dir)
     echo "==> Installing settings page to $dest (needs root)"
-    if [[ -w "$dest" ]]; then
-        install -m 644 "$tmp/$asset" "$dest/$PLUGIN_ID.so"
-    else
-        sudo install -m 644 "$tmp/$asset" "$dest/$PLUGIN_ID.so"
-    fi
+    sudo install -m 644 "$tmp/$asset" "$dest/$PLUGIN_ID.so"
 }
 
 download_failed() {
@@ -105,16 +94,13 @@ download_failed() {
 
 install_built() {
     echo "==> Building settings page"
+    # Qt only loads plugins from its own directory, under /usr.
     cmake -S "$SOURCE_DIR/kcm" -B "$SOURCE_DIR/kcm/build" \
-        -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
     cmake --build "$SOURCE_DIR/kcm/build" --parallel
 
-    echo "==> Installing settings page to $PREFIX (needs root)"
-    if [[ -w "$PREFIX/lib" ]]; then
-        cmake --install "$SOURCE_DIR/kcm/build"
-    else
-        sudo cmake --install "$SOURCE_DIR/kcm/build"
-    fi
+    echo "==> Installing settings page (needs root)"
+    sudo cmake --install "$SOURCE_DIR/kcm/build"
 }
 
 qdbus_cmd=""
@@ -139,18 +125,13 @@ case "$SETTINGS_PAGE" in
 esac
 
 echo "==> Enabling the script"
-if have kwriteconfig6; then
-    kwriteconfig6 --file kwinrc --group Plugins --key toggle_windowsEnabled true
-else
-    echo "    kwriteconfig6 not found; enable Toggle Windows yourself in" >&2
-    echo "    System Settings > Window Management > KWin Scripts." >&2
-fi
+kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true
 
 if [[ -n "$qdbus_cmd" ]]; then
     echo "==> Loading the script"
-    "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript toggle_windows >/dev/null 2>&1 || true
+    "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_ID" >/dev/null 2>&1 || true
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-        "$SCRIPT_DIR/contents/code/main.js" toggle_windows >/dev/null 2>&1 || true
+        "$SCRIPT_DIR/contents/code/main.js" "$PLUGIN_ID" >/dev/null 2>&1 || true
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
 fi
 

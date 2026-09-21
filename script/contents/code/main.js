@@ -53,24 +53,17 @@ function windowMatches(win, entry) {
     return classOk && capOk;
 }
 
-function matchingEntry(win) {
-    for (const id in entries) {
-        if (windowMatches(win, entries[id])) return entries[id];
-    }
-    return null;
+function isManaged(win) {
+    return Object.values(entries).some((entry) => windowMatches(win, entry));
 }
 
 // KWin 6: stackingOrder replaces clientList
 function findWindow(entry) {
-    const wl = workspace.stackingOrder;
-    for (let i = 0; i < wl.length; i++) {
-        if (windowMatches(wl[i], entry)) return wl[i];
-    }
-    return null;
+    return workspace.stackingOrder.find((win) => windowMatches(win, entry));
 }
 
 function trackWindow(win) {
-    if (!matchingEntry(win)) return;
+    if (!isManaged(win)) return;
     win.skipTaskbar = true;
     hidden[win.internalId] = win;
 }
@@ -83,7 +76,7 @@ function forgetWindow(win) {
 function refreshTaskbarState() {
     for (const key in hidden) {
         const win = hidden[key];
-        if (!matchingEntry(win)) {
+        if (!isManaged(win)) {
             win.skipTaskbar = false;
             delete hidden[key];
         }
@@ -92,12 +85,7 @@ function refreshTaskbarState() {
 }
 
 function getManagedWindows() {
-    let managed = [];
-    for (const id in entries) {
-        let client = findWindow(entries[id]);
-        if (client) managed.push(client);
-    }
-    return managed;
+    return Object.values(entries).map(findWindow).filter(Boolean);
 }
 
 // Toggle windows: bring target to top, minimize others

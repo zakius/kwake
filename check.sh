@@ -5,22 +5,11 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-find_tool() {
-    for candidate in "$@"; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            echo "$candidate"
-            return
-        fi
-    done
-    echo "error: none of $* found" >&2
-    exit 1
-}
-
-qtpaths=$(find_tool qtpaths6 qtpaths /usr/lib/qt6/bin/qtpaths)
-qmllint=$(find_tool qmllint6 qmllint /usr/lib/qt6/bin/qmllint)
+# Arch keeps qmllint out of PATH.
+qmllint=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
 
 echo "==> KWin script"
-node --check script/contents/code/main.js
+node test_main.js
 
 echo "==> Metadata and config files"
 python3 -m json.tool script/metadata.json >/dev/null
@@ -34,11 +23,6 @@ expected = "kwin/effects/configs/" + meta["KPlugin"]["Id"]
 actual = meta.get("X-KDE-ConfigModule")
 if actual != expected:
     raise SystemExit(f"script/metadata.json: X-KDE-ConfigModule is {actual!r}, must be {expected!r}")
-# install.sh installs the prebuilt plugin under this name.
-import re
-found = re.search(r'^PLUGIN_ID="([^"]+)"', open("install.sh").read(), re.M)
-if not found or found.group(1) != meta["KPlugin"]["Id"]:
-    raise SystemExit(f"install.sh: PLUGIN_ID must be {meta['KPlugin']['Id']!r}")
 PY
 python3 -c "import sys, xml.dom.minidom as m; [m.parse(f) for f in sys.argv[1:]]" \
     script/contents/config/main.xml script/contents/ui/config.ui
@@ -49,8 +33,6 @@ shellcheck install.sh uninstall.sh check.sh ci/*.sh
 echo "==> QML (qmllint)"
 # kcm and i18n are provided by the settings host at runtime, so qmllint cannot
 # see them; unqualified access is reported but not fatal. Everything else is.
-"$qmllint" -I "$("$qtpaths" --query QT_INSTALL_QML)" \
-    --missing-property warning --unqualified info --max-warnings 0 \
-    kcm/ui/main.qml
+"$qmllint" --missing-property warning --unqualified info --max-warnings 0 kcm/ui/main.qml
 
 echo "All checks passed."
