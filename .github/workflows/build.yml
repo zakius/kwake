@@ -72,6 +72,6 @@ jobs:
         if: matrix.artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kcm_toggle_windows-debian-trixie
-          path: kcm/build/bin/kwin/effects/configs/kcm_toggle_windows.so
+          name: toggle_windows-kcm-debian-trixie
+          path: kcm/build/bin/kwin/effects/configs/toggle_windows.so
           if-no-files-found: error

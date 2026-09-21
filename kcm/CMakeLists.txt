@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.16)
-project(kcm_toggle_windows)
+cmake_minimum_required(VERSION 3.19)
+project(toggle_windows_kcm)
 
 # ECM only sets up plugin output directories when a version is requested.
 find_package(ECM 6.0 REQUIRED NO_MODULE)
@@ -16,15 +16,21 @@ foreach(component CoreAddons Config KCMUtils)
     find_package(KF6${component} REQUIRED)
 endforeach()
 
+# The KWin Scripts page opens this plugin with the *script's* metadata, so the
+# page's id is the script's id, and the form is looked up at
+# qrc:/kcm/<script id>/main.qml. Naming the plugin after that id makes the
+# path match both there and in kcmshell6, which takes the id from the filename.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../script/metadata.json" script_metadata)
+string(JSON script_id GET "${script_metadata}" KPlugin Id)
+
 # Installs into Qt's plugin directory under kwin/effects/configs, which is where
-# the X-KDE-ConfigModule entry in the script's metadata.json points. The form
-# itself is ui/main.qml, compiled into the plugin.
-kcmutils_add_qml_kcm(kcm_toggle_windows
+# the X-KDE-ConfigModule entry in the script's metadata.json points.
+kcmutils_add_qml_kcm(${script_id}
     SOURCES src/kcm.cpp
     INSTALL_NAMESPACE "kwin/effects/configs"
     DISABLE_DESKTOP_FILE_GENERATION
 )
-target_link_libraries(kcm_toggle_windows
+target_link_libraries(${script_id}
     Qt6::Gui
     Qt6::DBus
     KF6::ConfigCore

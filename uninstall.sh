@@ -50,7 +50,7 @@ for qtpaths in qtpaths6 qtpaths; do
     if have "$qtpaths"; then plugin_dirs=("$("$qtpaths" --query QT_INSTALL_PLUGINS)" "${plugin_dirs[@]}"); break; fi
 done
 for dir in "${plugin_dirs[@]}"; do
-    plugin="$dir/kwin/effects/configs/kcm_toggle_windows.so"
+    plugin="$dir/kwin/effects/configs/toggle_windows.so"
     [[ -e "$plugin" ]] || continue
     if [[ -w "$(dirname "$plugin")" ]]; then rm -f "$plugin"; else sudo rm -f "$plugin"; fi
     echo "    removed $plugin"

@@ -57,7 +57,7 @@ if [[ $BUILD_KCM -eq 1 ]]; then
 else
     echo "==> Skipping settings page; falling back to the plain text editor"
     # Without the compiled page, KDE's generic editor renders contents/ui/config.ui.
-    sed -i 's|"kwin/effects/configs/kcm_toggle_windows"|"kwin/effects/configs/kcm_kwin4_genericscripted"|' \
+    sed -i 's|"kwin/effects/configs/toggle_windows"|"kwin/effects/configs/kcm_kwin4_genericscripted"|' \
         "$SCRIPT_DIR/metadata.json"
 fi
 
