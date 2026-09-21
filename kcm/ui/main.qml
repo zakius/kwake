@@ -1,5 +1,5 @@
 /*
-    The Toggle Windows settings form. One row per application, kept in a
+    The Kwake settings form. One row per application, kept in a
     ListModel and written back to kcm.entries as the line format the script
     reads: Name | resourceClass | caption | shortcut
 */

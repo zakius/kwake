@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Install the Toggle Windows KWin script and its settings page.
+# Install the Kwake KWin script and its settings page.
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/toggle_windows"
-REPO="zakius/kwin-toggle-windows"
+SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/kwake"
+REPO="zakius/kwake"
 # The settings host looks the plugin up by the script's id, so this must equal
 # KPlugin.Id in script/metadata.json; check.sh fails if they differ.
-PLUGIN_ID="toggle_windows"
+PLUGIN_ID="kwake"
 # The self-contained installer attached to every release.
-BUNDLE="toggle-windows.run"
+BUNDLE="kwake.run"
 # Empty means: the plugin for this CPU embedded next to this script.
 PLUGIN_FILE=""
 ONLINE=0
@@ -135,7 +135,7 @@ cat <<DONE
 
 Done. Add your applications in
 System Settings > Window Management > KWin Scripts > the settings icon
-next to Toggle Windows. Restart System Settings first if it is open.
+next to Kwake. Restart System Settings first if it is open.
 
 Nothing is configured out of the box, so no shortcuts are registered yet.
 DONE

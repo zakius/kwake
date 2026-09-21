@@ -1,10 +1,10 @@
 {
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
-        "Name": "Toggle Windows",
+        "Name": "Kwake",
         "Description": "Show or hide chosen applications with a global shortcut.",
         "Icon": "preferences-system-windows",
-        "Id": "toggle_windows",
+        "Id": "kwake",
         "Version": "2.0",
         "License": "GPL-3.0-or-later",
         "Category": "KWinscript"
@@ -12,5 +12,5 @@
 
     "X-Plasma-API": "javascript",
     "X-Plasma-MainScript": "code/main.js",
-    "X-KDE-ConfigModule": "kwin/effects/configs/toggle_windows"
+    "X-KDE-ConfigModule": "kwin/effects/configs/kwake"
 }

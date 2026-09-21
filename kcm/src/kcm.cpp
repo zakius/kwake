@@ -1,8 +1,8 @@
 /*
-    Config page for the Toggle Windows KWin script.
+    Config page for the Kwake KWin script.
 
     The script stores its applications as one line per entry in
-    kwinrc [Script-toggle_windows] Entries:
+    kwinrc [Script-kwake] Entries:
 
         Name | resourceClass | caption | shortcut
 
@@ -27,17 +27,17 @@ using namespace Qt::StringLiterals;
 namespace
 {
 constexpr auto kConfigFile = "kwinrc"_L1;
-constexpr auto kConfigGroup = "Script-toggle_windows"_L1;
+constexpr auto kConfigGroup = "Script-kwake"_L1;
 constexpr auto kConfigKey = "Entries"_L1;
 }
 
-class ToggleWindowsKCM : public KQuickConfigModule
+class KwakeKCM : public KQuickConfigModule
 {
     Q_OBJECT
     Q_PROPERTY(QString entries READ entries WRITE setEntries NOTIFY entriesChanged)
 
 public:
-    ToggleWindowsKCM(QObject *parent, const KPluginMetaData &data)
+    KwakeKCM(QObject *parent, const KPluginMetaData &data)
         : KQuickConfigModule(parent, data)
     {
         setButtons(Apply | Default);
@@ -123,6 +123,6 @@ private:
     QString m_saved;
 };
 
-K_PLUGIN_CLASS_WITH_JSON(ToggleWindowsKCM, "metadata.json")
+K_PLUGIN_CLASS_WITH_JSON(KwakeKCM, "metadata.json")
 
 #include "kcm.moc"

@@ -1,7 +1,7 @@
 {
     "KPlugin": {
-        "Name": "Toggle Windows",
-        "Description": "Applications toggled by the Toggle Windows KWin script",
+        "Name": "Kwake",
+        "Description": "Applications toggled by the Kwake KWin script",
         "Icon": "preferences-system-windows",
         "License": "GPL-3.0-or-later"
     }

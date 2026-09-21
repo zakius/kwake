@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(toggle_windows_kcm)
+project(kwake_kcm)
 
 # ECM only sets up plugin output directories when a version is requested.
 find_package(ECM 6.0 REQUIRED NO_MODULE)

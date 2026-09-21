@@ -1,9 +1,9 @@
-// Toggle Windows - applications are configured in the script's System Settings page.
-// Storage is one line per application in kwinrc [Script-toggle_windows] Entries:
+// Kwake - applications are configured in the script's System Settings page.
+// Storage is one line per application in kwinrc [Script-kwake] Entries:
 //     Name | resourceClass | caption | shortcut
 // resourceClass and caption are case-insensitive substring matches; both optional.
 
-const SHORTCUT_PREFIX = "toggle_windows_";
+const SHORTCUT_PREFIX = "kwake_";
 const KGA_SERVICE = "org.kde.kglobalaccel";
 
 // id -> entry, for every application currently configured.
@@ -126,7 +126,7 @@ function applyConfig() {
         if (!entries[id]) {
             // Entry deleted: free its key combo and drop it from the
             // Shortcuts page instead of leaving a dead binding behind.
-            print(`Toggle Windows: dropping shortcut ${id}`);
+            print(`Kwake: dropping shortcut ${id}`);
             unregisterShortcut(id);
             delete registered[id];
         }
@@ -145,7 +145,7 @@ function applyConfig() {
     }
 
     refreshTaskbarState();
-    print(`Toggle Windows: ${Object.keys(entries).length} applications configured`);
+    print(`Kwake: ${Object.keys(entries).length} applications configured`);
 }
 
 applyConfig();
@@ -163,7 +163,7 @@ callDBus(
     (names) => {
         names.forEach((name) => {
             if (name.startsWith(SHORTCUT_PREFIX) && !entries[name]) {
-                print(`Toggle Windows: dropping orphaned shortcut ${name}`);
+                print(`Kwake: dropping orphaned shortcut ${name}`);
                 unregisterShortcut(name);
             }
         });
