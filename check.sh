@@ -54,7 +54,8 @@ echo "==> QML (qmllint)"
 
 echo "==> C++ (clazy, warnings are errors)"
 export CLAZY_CHECKS
-export CLAZY_IGNORE_DIRS=".*/build-clazy/.*"
+# System headers are not ours to fix; unused-result-check misfires inside libstdc++.
+export CLAZY_IGNORE_DIRS=".*/build-clazy/.*|/usr/.*"
 cmake -S kcm -B kcm/build-clazy -DCMAKE_CXX_COMPILER=clazy -DCMAKE_CXX_FLAGS=-Werror >/dev/null
 cmake --build kcm/build-clazy --clean-first
 
