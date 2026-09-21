@@ -8,7 +8,8 @@ REPO="zakius/kwin-toggle-windows"
 # The settings host looks the plugin up by the script's id, so this must equal
 # KPlugin.Id in script/metadata.json; check.sh fails if they differ.
 PLUGIN_ID="toggle_windows"
-SETTINGS_PAGE="prebuilt"
+# Empty means: download the release build for this CPU.
+PLUGIN_FILE=""
 
 usage() {
     cat <<USAGE
@@ -17,19 +18,21 @@ Usage: $0 [options]
 By default the settings page is downloaded, prebuilt for this CPU (x86_64 or
 ARM64), from the project's GitHub releases.
 
-  --build         Build the settings page from this checkout instead. Needs
-                  the build tools listed in the README.
+  --plugin FILE   Install this settings page plugin instead of downloading
+                  one, e.g. one built as described in the README.
   -h, --help      Show this message.
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --build) SETTINGS_PAGE="build"; shift ;;
+        --plugin) PLUGIN_FILE="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
+# Checked before anything is touched, so a mistyped path changes nothing.
+[[ -z "$PLUGIN_FILE" || -f "$PLUGIN_FILE" ]] || { echo "error: $PLUGIN_FILE does not exist" >&2; exit 1; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -47,12 +50,12 @@ kwin_plugin_dir() {
     exit 1
 }
 
-install_prebuilt() {
-    local arch asset tag base dest
+download_plugin() {
+    local arch asset tag base
     arch=$(uname -m)
     case "$arch" in
         x86_64|aarch64) ;;
-        *) echo "error: no prebuilt settings page for $arch; use --build" >&2; exit 1 ;;
+        *) echo "error: no prebuilt settings page for $arch; build one and pass it with --plugin" >&2; exit 1 ;;
     esac
     asset="$PLUGIN_ID-$arch.so"
     # A checkout sitting on a release tag gets that release's plugin; anything
@@ -78,27 +81,21 @@ install_prebuilt() {
         exit 1
     }
 
-    dest=$(kwin_plugin_dir)
-    echo "==> Installing settings page to $dest (needs root)"
-    sudo install -m 644 "$tmp/$asset" "$dest/$PLUGIN_ID.so"
+    PLUGIN_FILE="$tmp/$asset"
 }
 
 download_failed() {
     echo "error: could not download the settings page from $REPO." >&2
     echo "       For a private repository, install gh and run 'gh auth login'." >&2
-    echo "       Or build it here with --build." >&2
+    echo "       Or build it yourself and pass it with --plugin; see the README." >&2
     exit 1
 }
 
-install_built() {
-    echo "==> Building settings page"
-    # Qt only loads plugins from its own directory, under /usr.
-    cmake -S "$SOURCE_DIR/kcm" -B "$SOURCE_DIR/kcm/build" \
-        -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
-    cmake --build "$SOURCE_DIR/kcm/build" --parallel
-
-    echo "==> Installing settings page (needs root)"
-    sudo cmake --install "$SOURCE_DIR/kcm/build"
+install_plugin() {
+    local dest
+    dest=$(kwin_plugin_dir)
+    echo "==> Installing settings page to $dest (needs root)"
+    sudo install -m 644 "$PLUGIN_FILE" "$dest/$PLUGIN_ID.so"
 }
 
 qdbus_cmd=""
@@ -111,10 +108,8 @@ rm -rf "$SCRIPT_DIR"
 mkdir -p "$SCRIPT_DIR"
 cp -r "$SOURCE_DIR/script/." "$SCRIPT_DIR/"
 
-case "$SETTINGS_PAGE" in
-    prebuilt) install_prebuilt ;;
-    build) install_built ;;
-esac
+[[ -n "$PLUGIN_FILE" ]] || download_plugin
+install_plugin
 
 echo "==> Enabling the script"
 kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true

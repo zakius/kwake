@@ -20,12 +20,11 @@ KDE Plasma 6. Nothing else is needed.
 Ubuntu 24.04 ships Plasma 5, which is not supported; Ubuntu releases with
 Plasma 6 start at 25.04.
 
-### 2. Build tools (only for `--build`)
+### 2. Build the settings page yourself (optional)
 
 The installer downloads the settings page prebuilt for x86_64 and ARM64, so
-most installs skip this step. It is only needed to build the settings page
-yourself with `./install.sh --build`, for another CPU type or to try changes
-that are not released yet.
+most installs skip this step. Build it yourself for another CPU type or to try
+changes that are not released yet. First the build tools:
 
 Debian and Ubuntu:
 
@@ -46,6 +45,16 @@ sudo dnf install gcc-c++ cmake extra-cmake-modules \
 Tested on Debian 13, Ubuntu 26.04 and Fedora 44. Debian and Ubuntu use the
 same package names.
 
+Then build from the repository root:
+
+```sh
+cmake -S kcm -B kcm/build -DCMAKE_BUILD_TYPE=Release
+cmake --build kcm/build
+```
+
+This produces `kcm/build/bin/kwin/effects/configs/toggle_windows.so`, which the next
+step installs.
+
 ### 3. Install
 
 ```sh
@@ -61,10 +70,10 @@ A checkout of a release tag gets that release's settings page instead of the
 latest. Downloads go through `gh` when it is installed and logged in, which a
 private repository needs, and through `curl` otherwise.
 
-To build the settings page from this checkout instead:
+To install a settings page you built in step 2 instead of downloading one:
 
 ```sh
-./install.sh --build
+./install.sh --plugin kcm/build/bin/kwin/effects/configs/toggle_windows.so
 ```
 
 Then add your applications in **System Settings → Window Management →
