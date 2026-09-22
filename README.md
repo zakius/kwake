@@ -24,10 +24,6 @@ curl -LO https://github.com/zakius/kwake/releases/latest/download/kwake.run
 sh kwake.run
 ```
 
-While the repository is private, `curl` gets a 404 error here, because it does
-not sign in to GitHub. Download `kwake.run` from the Releases page in a
-signed-in browser instead.
-
 `kwake.run` carries everything: the KWin script and the settings page for
 x86_64 and ARM64. It checks its own SHA256 checksum before unpacking, then asks
 for root to place the settings page next to KWin's own plugins. Everything else
@@ -45,8 +41,7 @@ sh kwake.run -- --online
 ```
 
 This downloads the latest release's installer, checks it against the release's
-`SHA256SUMS` and runs it. It fails while the repository is private; download the new
-`.run` from the Releases page and run it instead. Options for the installer go after `--`; the ones
+`SHA256SUMS` and runs it. Options for the installer go after `--`; the ones
 before it belong to the `.run` wrapper itself. `sh kwake.run --info` shows
 which release a file is.
 
