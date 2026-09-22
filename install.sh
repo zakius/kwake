@@ -63,13 +63,8 @@ install_latest() {
     trap 'rm -rf "$tmp"' EXIT
 
     echo "==> Downloading the latest release of $REPO"
-    if have gh && gh auth status >/dev/null 2>&1; then
-        gh release download --repo "$REPO" \
-            --pattern "$BUNDLE" --pattern SHA256SUMS --dir "$tmp" || download_failed
-    else
-        curl -fsSL -o "$tmp/$BUNDLE" "https://github.com/$REPO/releases/latest/download/$BUNDLE" || download_failed
-        curl -fsSL -o "$tmp/SHA256SUMS" "https://github.com/$REPO/releases/latest/download/SHA256SUMS" || download_failed
-    fi
+    curl -fsSL -o "$tmp/$BUNDLE" "https://github.com/$REPO/releases/latest/download/$BUNDLE" || download_failed
+    curl -fsSL -o "$tmp/SHA256SUMS" "https://github.com/$REPO/releases/latest/download/SHA256SUMS" || download_failed
     # Verified before it runs anything, let alone anything as root.
     (cd "$tmp" && sha256sum --check --ignore-missing --quiet SHA256SUMS) || {
         echo "error: the downloaded installer does not match its checksum" >&2
@@ -80,7 +75,6 @@ install_latest() {
 
 download_failed() {
     echo "error: could not download the latest release from $REPO." >&2
-    echo "       For a private repository, install gh and run 'gh auth login'." >&2
     exit 1
 }
 
