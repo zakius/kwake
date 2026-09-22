@@ -85,12 +85,13 @@ jobs:
           sudo apt-get install -y makeself
           ci/make-bundle.sh "$GITHUB_REF_NAME"
 
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd dist
-          sha256sum -- *.run > SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
-            -- *.run SHA256SUMS
+      - name: Checksums
+        run: cd dist && sha256sum -- *.run > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.run
+            dist/SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true
