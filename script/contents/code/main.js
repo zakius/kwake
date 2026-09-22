@@ -1,7 +1,7 @@
 // Kwake - applications are configured in the script's System Settings page.
 // Storage is one line per application in kwinrc [Script-kwake] Entries:
 //     Name | resourceClass | caption | shortcut
-// resourceClass and caption are case-insensitive substring matches; both optional.
+// Class is an exact, case-insensitive match; caption is an optional substring.
 
 const SHORTCUT_PREFIX = "kwake_";
 const KGA_SERVICE = "org.kde.kglobalaccel";
@@ -10,6 +10,8 @@ const KGA_SERVICE = "org.kde.kglobalaccel";
 let entries = {};
 // id -> the key sequence we last passed to registerShortcut.
 let registered = {};
+// Entry id -> window UUID. A selected window keeps its identity as its title changes.
+let selected = {};
 // internalId -> window, for the windows this script took off the taskbar. Only
 // these get restored, so windows that asked to skip the taskbar themselves
 // (panels, splashes) are never dragged back into it.
@@ -23,7 +25,7 @@ function parseEntries(text) {
 
         const f = line.split("|").map((s) => s.trim());
         const name = f[0];
-        if (!name) return;
+        if (!name || !f[1]) return;
         // Anything else would break the kglobalshortcutsrc key.
         const id = SHORTCUT_PREFIX + name.replace(/[^A-Za-z0-9_-]/g, "_");
         if (parsed[id]) return;
@@ -44,48 +46,50 @@ function unregisterShortcut(id) {
 }
 
 function windowMatches(win, entry) {
-    const classOk =
-        !entry.resourceClass ||
-        win.resourceClass.toLowerCase().includes(entry.resourceClass.toLowerCase());
+    const classOk = win.resourceClass.toLowerCase() === entry.resourceClass.toLowerCase();
     const capOk =
         !entry.caption ||
         win.caption.toLowerCase().includes(entry.caption.toLowerCase());
-    return classOk && capOk;
+    return (win.normalWindow || win.dialog) && classOk && capOk;
 }
 
-function isManaged(win) {
-    return Object.values(entries).some((entry) => windowMatches(win, entry));
-}
-
-// KWin 6: stackingOrder replaces clientList
-function findWindow(entry) {
-    return workspace.stackingOrder.find((win) => windowMatches(win, entry));
-}
-
-function trackWindow(win) {
-    if (!isManaged(win)) return;
-    win.skipTaskbar = true;
-    hidden[win.internalId] = win;
+function findWindow(entry, windows) {
+    const retained = windows.find((win) => String(win.internalId) === selected[entry.id]);
+    if (retained) return retained;
+    const matches = windows.filter((win) => windowMatches(win, entry));
+    const target = matches.find((win) => win === workspace.activeWindow) || matches[matches.length - 1];
+    if (target) selected[entry.id] = String(target.internalId);
+    else delete selected[entry.id];
+    return target;
 }
 
 function forgetWindow(win) {
     delete hidden[win.internalId];
+    refreshTaskbarState(win);
 }
 
-// Give back to the taskbar any window whose application is no longer configured.
-function refreshTaskbarState() {
+function refreshTaskbarState(removed) {
+    const windows = workspace.stackingOrder.filter((win) => win !== removed && !win.deleted);
+    const managed = Object.values(entries).map((entry) => findWindow(entry, windows)).filter(Boolean);
     for (const key in hidden) {
         const win = hidden[key];
-        if (!isManaged(win)) {
-            win.skipTaskbar = false;
+        if (!managed.includes(win)) {
+            if (windows.includes(win)) win.skipTaskbar = false;
             delete hidden[key];
         }
     }
-    workspace.stackingOrder.forEach(trackWindow);
+    managed.forEach((win) => {
+        if (!win.skipTaskbar) {
+            hidden[win.internalId] = win;
+            win.skipTaskbar = true;
+        }
+    });
+    return managed;
 }
 
-function getManagedWindows() {
-    return Object.values(entries).map(findWindow).filter(Boolean);
+function watchWindow(win) {
+    win.captionChanged.connect(() => refreshTaskbarState());
+    win.windowClassChanged.connect(() => refreshTaskbarState());
 }
 
 // Toggle windows: bring target to top, minimize others
@@ -93,13 +97,9 @@ function toggleWindow(id) {
     const entry = entries[id];
     if (!entry) return; // removed from the config since this shortcut was bound
 
-    let target = findWindow(entry);
-    if (!target) {
-        print(`No window found for ${entry.name}`);
-        return;
-    }
-
-    let managed = getManagedWindows();
+    const managed = refreshTaskbarState();
+    const target = managed.find((win) => String(win.internalId) === selected[id]);
+    if (!target) return;
     let isTopMost = workspace.activeWindow === target;
 
     if (isTopMost) {
@@ -120,7 +120,13 @@ function toggleWindow(id) {
 }
 
 function applyConfig() {
-    entries = parseEntries(readConfig("Entries", "").toString());
+    const updated = parseEntries(readConfig("Entries", "").toString());
+    for (const id in selected) {
+        if (!updated[id] || updated[id].resourceClass !== entries[id].resourceClass || updated[id].caption !== entries[id].caption) {
+            delete selected[id];
+        }
+    }
+    entries = updated;
 
     for (const id in registered) {
         if (!entries[id]) {
@@ -149,8 +155,12 @@ function applyConfig() {
 }
 
 applyConfig();
+workspace.stackingOrder.forEach(watchWindow);
 options.configChanged.connect(applyConfig);
-workspace.windowAdded.connect(trackWindow);
+workspace.windowAdded.connect((win) => {
+    watchWindow(win);
+    refreshTaskbarState();
+});
 workspace.windowRemoved.connect(forgetWindow);
 
 // Shortcuts orphaned by an earlier session (config edited while KWin was not

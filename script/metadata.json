@@ -5,7 +5,7 @@
         "Description": "Show or hide chosen applications with a global shortcut.",
         "Icon": "preferences-system-windows",
         "Id": "kwake",
-        "Version": "2.0",
+        "Version": "3.0.0",
         "License": "GPL-3.0-or-later",
         "Category": "KWinscript"
     },

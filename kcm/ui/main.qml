@@ -36,7 +36,7 @@ KCM.SimpleKCM {
         apps.clear()
         text.split("\n").forEach(line => {
             const fields = line.split("|").map(field => field.trim())
-            if (!fields[0]) {
+            if (!fields[0] || fields[0].startsWith("#")) {
                 return
             }
             apps.append({
@@ -104,7 +104,7 @@ KCM.SimpleKCM {
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: i18n("Each application gets a global shortcut that raises it, or minimises it again if it already has focus. Window class and title are case-insensitive substring matches; leave the title empty to match on class alone.")
+            text: i18n("Each shortcut controls one window until it closes. Window class is an exact match, ignoring case; use Detect Window to fill it in. The optional title filter matches part of the title. Other matching windows stay on the taskbar.")
         }
 
         Repeater {
@@ -172,7 +172,7 @@ KCM.SimpleKCM {
                         QQC2.TextField {
                             Layout.fillWidth: true
                             text: card.windowClass
-                            placeholderText: i18n("Matched as a case-insensitive substring")
+                            placeholderText: i18n("Exact window class (required)")
                             onTextEdited: {
                                 apps.setProperty(card.index, "windowClass", text)
                                 root.commit()

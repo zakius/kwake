@@ -118,6 +118,17 @@ echo "==> Enabling the script"
 kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true
 
 if [[ -n "$qdbus_cmd" ]]; then
+    # A loaded script owns taskbar changes that disappear from memory when unloaded.
+    if [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null || true) == true ]]; then
+        saved_entries=$(kreadconfig6 --file kwinrc --group Script-kwake --key Entries)
+        restore_entries() { kwriteconfig6 --file kwinrc --group Script-kwake --key Entries "$saved_entries"; }
+        trap restore_entries EXIT
+        kwriteconfig6 --file kwinrc --group Script-kwake --key Entries ""
+        "$qdbus_cmd" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
+        sleep 2
+        restore_entries
+        trap - EXIT
+    fi
     echo "==> Loading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_ID" >/dev/null 2>&1 || true
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \

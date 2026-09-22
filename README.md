@@ -62,14 +62,21 @@ shortcuts editor. It also deletes your list of applications.
   to the last application in your list whose window is not minimised.
 - If the application is not running, the shortcut does nothing; Kwake does not
   start applications.
-- Windows of applications in your list are kept off the taskbar, since the
-  shortcut is how you reach them. They go back on the taskbar as soon as you
-  remove the application.
+- Selected windows are kept off the taskbar, since the shortcut is how you
+  reach them. Removing an entry restores windows that Kwake hid.
 
-Each row matches windows by class and, optionally, by title. Both are
-case-insensitive substring matches, so `ghostty` matches
-`com.mitchellh.ghostty`. If several windows match a row, Kwake toggles only one
-of them.
+Each row requires an exact window class, ignoring case. Use **Detect Window**
+to fill it in. The optional title filter is a case-insensitive substring.
+Replace shortened class names from hand-written configurations with the full
+class shown by the picker.
+
+Kwake selects the focused matching window, or the topmost match if none has
+focus. It retains that window by its KWin identifier until it closes, even if
+the title changes. It then selects a replacement by the same rule. If nothing
+matches, the shortcut silently does nothing.
+
+Only the selected window is hidden from the taskbar. Other matching windows
+keep their taskbar state. Changing a row's class or title filter selects again.
 
 ## Settings
 
