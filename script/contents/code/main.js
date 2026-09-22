@@ -35,7 +35,8 @@ function parseEntries(text) {
             id: id,
             resourceClass: f[1] || "",
             caption: f[2] || "",
-            shortcut: f[3] || "",
+            // A shortcut on the | key contains the separator itself.
+            shortcut: f.slice(3).join("|"),
         };
     });
     return parsed;
@@ -114,6 +115,11 @@ function toggleWindow(id) {
         managed.forEach((client) => {
             if (client !== target) client.minimized = true;
         });
+        // Pull the window to this desktop instead of switching to its own.
+        // An empty list means the window is on all desktops.
+        if (target.desktops.length && !target.desktops.includes(workspace.currentDesktop)) {
+            target.desktops = [workspace.currentDesktop];
+        }
         target.minimized = false;
         workspace.activeWindow = target;
     }

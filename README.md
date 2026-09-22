@@ -13,8 +13,9 @@ application.
 
 ## Install
 
-Kwake needs KDE Plasma 6. Ubuntu 24.04 ships Plasma 5, which is not supported;
-Ubuntu releases with Plasma 6 start at 25.04.
+Kwake needs KDE Plasma 6 with Qt 6.8 and KDE Frameworks 6.13 or newer, such as
+Debian 13 or Ubuntu 25.10 and later. Ubuntu 24.04 (Plasma 5) and 25.04
+(Frameworks 6.12) are too old.
 
 Download the installer from the latest release and run it:
 
@@ -57,7 +58,8 @@ shortcuts editor. It also deletes your list of applications.
 ## How it behaves
 
 - Press an application's shortcut and its window is raised and focused, while
-  the windows of the other applications in your list are minimised.
+  the windows of the other applications in your list are minimised. A window
+  on another virtual desktop is moved to the current one.
 - Press it again while that window has focus and it is minimised. Focus moves
   to the last application in your list whose window is not minimised.
 - If the application is not running, the shortcut does nothing; Kwake does not
@@ -90,6 +92,11 @@ in the key `Entries`:
 ```
 Name | window class | title | shortcut
 ```
+
+Each name becomes a shortcut id: `kwake_` followed by the name, with every
+character other than ASCII letters, digits, `_` and `-` replaced by `_`. If two
+names give the same id, Kwake uses only the first entry. The settings page
+warns about this.
 
 ## Building from source
 

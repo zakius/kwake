@@ -15,13 +15,14 @@ const signal = () => {
 };
 const shortcuts = {};
 const unregistered = [];
-const win = (resourceClass, caption = "") => ({ resourceClass, caption, internalId: String(nextId++), normalWindow: true, minimized: false, skipTaskbar: false, captionChanged: signal(), windowClassChanged: signal() });
+const win = (resourceClass, caption = "") => ({ resourceClass, caption, internalId: String(nextId++), normalWindow: true, minimized: false, skipTaskbar: false, desktops: [], captionChanged: signal(), windowClassChanged: signal() });
 const term = win("com.mitchellh.ghostty");
 const chat = win("vesktop");
 const panel = Object.assign(win("plasmashell"), { skipTaskbar: true });
 const workspace = {
     stackingOrder: [panel, term, chat],
     activeWindow: null,
+    currentDesktop: "desktop 1",
     windowAdded: { connect(f) { windowAdded = f; } },
     windowRemoved: { connect(f) { windowRemoved = f; } },
 };
@@ -47,6 +48,14 @@ assert.ok(chat.minimized && !term.minimized);
 // ...and toggling it again while focused minimises it.
 shortcuts.kwake_Term.callback();
 assert.ok(term.minimized);
+
+// A window on another desktop is pulled to this one; all-desktop windows stay put.
+term.desktops = ["desktop 2"];
+workspace.activeWindow = null;
+shortcuts.kwake_Term.callback();
+assert.deepStrictEqual([...term.desktops], ["desktop 1"]);
+assert.deepStrictEqual(chat.desktops, []);
+shortcuts.kwake_Term.callback();
 
 // Removing an app unregisters its shortcut and gives its window back to the
 // taskbar, without touching windows that skip the taskbar on their own.
@@ -124,6 +133,10 @@ reload("Example | example | Document | Meta+E");
 assert.ok(topmost.skipTaskbar && !replacement.skipTaskbar);
 reload("Example | example | Document C | Meta+E");
 assert.ok(replacement.skipTaskbar && !topmost.skipTaskbar);
+
+// The | key in a shortcut is not a field separator.
+reload("Pipe | vesktop |  | Ctrl+|");
+assert.strictEqual(shortcuts.kwake_Pipe.keys, "Ctrl+|");
 
 const alreadyHidden = win("private");
 alreadyHidden.skipTaskbar = true;

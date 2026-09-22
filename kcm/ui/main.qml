@@ -22,6 +22,8 @@ KCM.SimpleKCM {
     // The last value this form wrote. Echoes of it are ignored, so typing never
     // rebuilds the model and steals focus from the field being edited.
     property string written: ""
+    // Set when two names map to the same shortcut id; see findCollision().
+    property string collision: ""
 
     ListModel {
         id: apps
@@ -44,9 +46,30 @@ KCM.SimpleKCM {
                 name: fields[0],
                 windowClass: fields[1] ?? "",
                 caption: fields[2] ?? "",
-                shortcut: fields[3] ?? "",
+                // A shortcut on the | key contains the separator itself.
+                shortcut: fields.slice(3).join("|"),
             })
         })
+        collision = findCollision()
+    }
+
+    // The script builds each shortcut id from the name with this same rule and
+    // ignores any later entry whose id is taken.
+    function findCollision() {
+        const seen = {}
+        for (let i = 0; i < apps.count; ++i) {
+            const app = apps.get(i)
+            const name = clean(app.name)
+            if (!name || !clean(app.windowClass)) {
+                continue
+            }
+            const id = name.replace(/[^A-Za-z0-9_-]/g, "_")
+            if (seen[id] !== undefined) {
+                return i18n("“%1” and “%2” get the same shortcut, so Kwake ignores “%2”. Names differing only in spaces or non-ASCII letters collide; rename one of them.", seen[id], name)
+            }
+            seen[id] = name
+        }
+        return ""
     }
 
     function commit() {
@@ -57,6 +80,7 @@ KCM.SimpleKCM {
                 lines.push([clean(app.name), clean(app.windowClass), clean(app.caption), app.shortcut].join(" | "))
             }
         }
+        collision = findCollision()
         written = lines.join("\n")
         kcm.entries = written
     }
@@ -105,6 +129,13 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             text: i18n("Each shortcut controls one window until it closes. Window class is an exact match, ignoring case; use Detect Window to fill it in. The optional title filter matches part of the title. Other matching windows stay on the taskbar.")
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: root.collision !== ""
+            type: Kirigami.MessageType.Warning
+            text: root.collision
         }
 
         Repeater {

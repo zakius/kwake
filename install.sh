@@ -32,7 +32,9 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --plugin) PLUGIN_FILE="$2"; shift 2 ;;
+        --plugin)
+            [[ $# -ge 2 ]] || { echo "error: --plugin needs a file" >&2; usage >&2; exit 1; }
+            PLUGIN_FILE="$2"; shift 2 ;;
         --online) ONLINE=1; shift ;;
         --uninstall) exec "$SOURCE_DIR/uninstall.sh" ;;
         -h|--help) usage; exit 0 ;;
@@ -131,6 +133,12 @@ if [[ -n "$qdbus_cmd" ]]; then
     fi
     echo "==> Loading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_ID" >/dev/null 2>&1 || true
+    # unloadScript only schedules the removal, and loadScript refuses a name
+    # that is still loaded, so wait for the old copy to be gone.
+    for _ in {1..50}; do
+        [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null) == true ]] || break
+        sleep 0.1
+    done
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
         "$SCRIPT_DIR/contents/code/main.js" "$PLUGIN_ID" >/dev/null 2>&1 || true
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
