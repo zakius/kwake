@@ -19,7 +19,7 @@ Ubuntu releases with Plasma 6 start at 25.04.
 Download the installer from the latest release and run it:
 
 ```sh
-gh release download --repo zakius/kwake --pattern kwake.run
+curl -LO https://github.com/zakius/kwake/releases/latest/download/kwake.run
 sh kwake.run
 ```
 
@@ -27,8 +27,7 @@ sh kwake.run
 x86_64 and ARM64. It checks its own SHA256 checksum before unpacking, then asks
 for root to place the settings page next to KWin's own plugins. Everything else
 is installed for your user only. It installs only what it carries and never
-goes online. While the repository is private, download it with `gh` as above or
-from the release page while logged in.
+goes online. You can also download it from the project's Releases page.
 
 Then add your applications in **System Settings → Window Management → KWin
 Scripts**, using the settings icon next to Kwake. Restart System Settings first
