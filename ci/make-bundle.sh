@@ -15,7 +15,7 @@ version="$1"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 
-cp -r install.sh uninstall.sh script "$stage/"
+cp -r install.sh uninstall.sh LICENSE script "$stage/"
 cp dist/*.so "$stage/"
 makeself --nox11 --sha256 --tar-quietly "$stage" "dist/kwake.run" \
     "Kwake $version" ./install.sh

@@ -29,7 +29,8 @@ if (!found || found[1] !== id)
 '
 
 echo "==> Shell scripts"
-shellcheck install.sh uninstall.sh check.sh ci/*.sh
+shellcheck install.sh uninstall.sh check.sh tests/*.sh ci/*.sh
+bash tests/test_uninstall.sh
 
 echo "==> QML (qmllint)"
 # kcm and i18n are provided by the settings host at runtime, so qmllint cannot

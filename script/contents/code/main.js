@@ -5,6 +5,12 @@
 
 const SHORTCUT_PREFIX = "kwake_";
 const KGA_SERVICE = "org.kde.kglobalaccel";
+let workspace;
+let options;
+let readConfig;
+let registerShortcut;
+let callDBus;
+let print;
 
 // id -> entry, for every application currently configured.
 let entries = {};
@@ -71,15 +77,20 @@ function forgetWindow(win) {
 
 function refreshTaskbarState(removed) {
     const windows = workspace.stackingOrder.filter((win) => win !== removed && !win.deleted);
-    const managed = Object.values(entries).map((entry) => findWindow(entry, windows)).filter(Boolean);
+    const taskbarWindows = [];
+    const managed = Object.values(entries).map((entry) => {
+        const win = findWindow(entry, windows);
+        if (win && entry.shortcut) taskbarWindows.push(win);
+        return win;
+    }).filter(Boolean);
     for (const key in hidden) {
         const win = hidden[key];
-        if (!managed.includes(win)) {
+        if (!taskbarWindows.includes(win)) {
             if (windows.includes(win)) win.skipTaskbar = false;
             delete hidden[key];
         }
     }
-    managed.forEach((win) => {
+    taskbarWindows.forEach((win) => {
         if (!win.skipTaskbar) {
             hidden[win.internalId] = win;
             win.skipTaskbar = true;
@@ -89,8 +100,17 @@ function refreshTaskbarState(removed) {
 }
 
 function watchWindow(win) {
-    win.captionChanged.connect(() => refreshTaskbarState());
-    win.windowClassChanged.connect(() => refreshTaskbarState());
+    win.captionChanged.connect(windowChanged);
+    win.windowClassChanged.connect(windowChanged);
+}
+
+function windowChanged() {
+    refreshTaskbarState();
+}
+
+function windowAdded(win) {
+    watchWindow(win);
+    refreshTaskbarState();
 }
 
 // Toggle windows: bring target to top, minimize others
@@ -160,28 +180,50 @@ function applyConfig() {
     print(`Kwake: ${Object.keys(entries).length} applications configured`);
 }
 
-applyConfig();
-workspace.stackingOrder.forEach(watchWindow);
-options.configChanged.connect(applyConfig);
-workspace.windowAdded.connect((win) => {
-    watchWindow(win);
-    refreshTaskbarState();
-});
-workspace.windowRemoved.connect(forgetWindow);
-
-// Shortcuts orphaned by an earlier session (config edited while KWin was not
-// running, or a crash before applyConfig got to them).
-callDBus(
-    KGA_SERVICE,
-    "/component/kwin",
-    "org.kde.kglobalaccel.Component",
-    "shortcutNames",
-    (names) => {
-        names.forEach((name) => {
-            if (name.startsWith(SHORTCUT_PREFIX) && !entries[name]) {
-                print(`Kwake: dropping orphaned shortcut ${name}`);
-                unregisterShortcut(name);
-            }
-        });
+function stop() {
+    // KWin shares the QML engine, so these signal callbacks outlive the root object.
+    options.configChanged.disconnect(applyConfig);
+    workspace.windowAdded.disconnect(windowAdded);
+    workspace.windowRemoved.disconnect(forgetWindow);
+    workspace.stackingOrder.forEach((win) => {
+        win.captionChanged.disconnect(windowChanged);
+        win.windowClassChanged.disconnect(windowChanged);
+    });
+    for (const key in hidden) {
+        const win = hidden[key];
+        if (win && !win.deleted) win.skipTaskbar = false;
     }
-);
+    hidden = {};
+}
+
+function start(host) {
+    workspace = host.workspace;
+    options = host.options;
+    readConfig = host.readConfig;
+    registerShortcut = host.registerShortcut;
+    callDBus = host.callDBus;
+    print = host.logMessage;
+
+    applyConfig();
+    workspace.stackingOrder.forEach(watchWindow);
+    options.configChanged.connect(applyConfig);
+    workspace.windowAdded.connect(windowAdded);
+    workspace.windowRemoved.connect(forgetWindow);
+
+    // Shortcuts orphaned by an earlier session (config edited while KWin was not
+    // running, or a crash before applyConfig got to them).
+    callDBus(
+        KGA_SERVICE,
+        "/component/kwin",
+        "org.kde.kglobalaccel.Component",
+        "shortcutNames",
+        (names) => {
+            names.forEach((name) => {
+                if (name.startsWith(SHORTCUT_PREFIX) && !entries[name]) {
+                    print(`Kwake: dropping orphaned shortcut ${name}`);
+                    unregisterShortcut(name);
+                }
+            });
+        }
+    );
+}

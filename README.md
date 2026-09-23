@@ -54,6 +54,16 @@ sh kwake.run -- --uninstall
 or `./uninstall.sh` from a git checkout. This puts any hidden windows back on
 the taskbar and unregisters the shortcuts, so nothing is left behind in the
 shortcuts editor. It also deletes your list of applications.
+The system-wide settings plugin stays installed for other users.
+
+To also remove the shared settings plugin, run:
+
+```sh
+sh kwake.run -- --uninstall --remove-system-plugin
+```
+
+From a checkout, use `./uninstall.sh --remove-system-plugin`. This requires
+root and removes the settings page for every user on the machine.
 
 ## How it behaves
 
@@ -64,8 +74,8 @@ shortcuts editor. It also deletes your list of applications.
   to the last application in your list whose window is not minimised.
 - If the application is not running, the shortcut does nothing; Kwake does not
   start applications.
-- Selected windows are kept off the taskbar, since the shortcut is how you
-  reach them. Removing an entry restores windows that Kwake hid.
+- Selected windows with a shortcut configured in Kwake stay off the taskbar.
+  Removing an entry or clearing its shortcut restores windows that Kwake hid.
 
 Each row requires an exact window class, ignoring case. Use **Detect Window**
 to fill it in. The optional title filter is a case-insensitive substring.
@@ -77,8 +87,16 @@ focus. It retains that window by its KWin identifier until it closes, even if
 the title changes. It then selects a replacement by the same rule. If nothing
 matches, the shortcut silently does nothing.
 
-Only the selected window is hidden from the taskbar. Other matching windows
-keep their taskbar state. Changing a row's class or title filter selects again.
+For entries with a shortcut, only the selected window is hidden from the
+taskbar. Other matching windows keep their taskbar state. Changing a row's class or title filter selects again.
+
+Disabling Kwake in KWin Scripts restores the taskbar buttons it hid.
+Windows that already hid their own taskbar buttons keep that state.
+Your application entries remain available when you re-enable Kwake.
+
+An entry with no shortcut in Kwake's settings keeps its taskbar button.
+Assigning a shortcut only in KDE's shortcut editor lets you toggle the window
+but leaves its taskbar button visible.
 
 ## Settings
 
@@ -119,7 +137,7 @@ sudo dnf install gcc-c++ cmake extra-cmake-modules \
     kf6-kcoreaddons-devel kf6-kconfig-devel kf6-kcmutils-devel
 ```
 
-Tested on Debian 13, Ubuntu 26.04 and Fedora 44.
+CI checks shared-library compatibility on Debian 13, Ubuntu 26.04 and Fedora 44.
 
 Build from the repository root, then install the result:
 
@@ -135,15 +153,22 @@ before changing anything.
 
 ## Compatibility
 
-The script is plain JavaScript and depends only on KWin's scripting API. It
-targets KWin 6.
+The script uses a QML entry point with JavaScript window-management logic.
+It targets KWin 6. The QML destruction handler restores taskbar state and
+disconnects window callbacks when the script unloads.
 
-The settings page is a QML form in a small compiled plugin. The plugin links
-against Qt 6 and KDE Frameworks 6 but no KWin library, so Plasma and KWin
-updates cannot break it. Qt and KDE Frameworks both keep ABI stable across a
-major version, so it keeps working through 6.x updates. Release builds load on
-any system with Qt 6.8 and KDE Frameworks 6.13 or newer. A future Qt 7 and
-Frameworks 7 transition would need a rebuild.
+The settings page links against Qt 6 and KDE Frameworks 6 without linking
+against KWin. Release builds use Debian 13's Qt 6.8 and Frameworks 6.13.
+CI checks their shared-library dependencies and symbols on Debian 13,
+Ubuntu 26.04 and Fedora 44, for x86_64 and ARM64. These checks do not open
+the settings page or test a live Plasma session.
+
+Newer Qt 6 and Frameworks 6 versions are expected to work, subject to the
+[Qt plugin compatibility rules](https://doc.qt.io/qt-6/deployment-plugins.html)
+and [KDE Frameworks compatibility policy](https://community.kde.org/Frameworks/Policies).
+Plasma integration still needs testing after updates. Other distributions are
+not covered by the release checks. A Qt 7 or Frameworks 7 transition would
+require a rebuild and compatibility testing.
 
 ## Development
 
@@ -155,10 +180,22 @@ Frameworks 7 transition would need a rebuild.
 
 This runs the script against a fake KWin (`test_main.js`, covering toggling,
 shortcut changes and taskbar restore), `qmllint` on the settings form with
-unknown properties made fatal, ShellCheck on the shell scripts, and a check
-that the metadata points the settings page at the right plugin. It needs
+unknown properties made fatal, ShellCheck on the shell scripts, isolated
+uninstall tests, and a check that the metadata points the settings page at the right plugin. It needs
 `node`, `shellcheck` and `qmllint`. CI runs it on Arch, whose current Qt gives
 `qmllint` the type information it needs.
+
+To test the script lifecycle in a separate headless KWin session:
+
+```sh
+python3 tests/test_lifecycle.py
+```
+
+This needs `kwin_wayland`, `kdialog`, `qdbus6`, `kwriteconfig6`, `dbus-run-session`
+and Python 3. It uses temporary configuration and a private D-Bus session.
+It checks real shortcut activation, disable/re-enable, direct unload, and
+restoration of taskbar state without changing your desktop. CI runs this test
+on Debian 13 before publishing a release.
 
 The C++ is checked while it compiles. `ci/build-plugin.sh` builds the settings
 page with [clazy](https://invent.kde.org/sdk/clazy), KDE's Qt-aware static
@@ -177,10 +214,11 @@ git tag -a v1.2.3 -m "v1.2.3"
 git push origin v1.2.3
 ```
 
-CI builds the settings page on Debian 13 for x86_64 and ARM64, loads each build
-on Debian 13, Ubuntu 26.04 and Fedora 44, and only if every check and load test
-passes publishes a GitHub release with `kwake.run` and `SHA256SUMS`. The `.run`
-file is built by makeself from `ci/make-bundle.sh`; never edit one by hand.
+CI builds the settings page on Debian 13 for x86_64 and ARM64 and checks its
+shared-library dependencies and symbols on Debian 13, Ubuntu 26.04 and Fedora 44.
+After all checks pass, CI publishes a GitHub release with `kwake.run`
+and `SHA256SUMS`. Makeself builds the `.run` file from `ci/make-bundle.sh`.
+Do not edit a `.run` file by hand.
 
 ## Licence
 

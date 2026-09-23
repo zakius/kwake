@@ -4,15 +4,22 @@ const fs = require("fs");
 const vm = require("vm");
 
 let config = "";
-let configChanged;
-let windowAdded;
-let windowRemoved;
 let nextId = 0;
 const messages = [];
 const signal = () => {
     const callbacks = [];
-    return { connect(f) { callbacks.push(f); }, emit() { callbacks.forEach(f => f()); } };
+    return {
+        connect(f) { callbacks.push(f); },
+        disconnect(f) { const index = callbacks.indexOf(f); assert.ok(index >= 0); callbacks.splice(index, 1); },
+        emit(...args) { callbacks.slice().forEach(f => f(...args)); },
+    };
 };
+const configSignal = signal();
+const addedSignal = signal();
+const removedSignal = signal();
+const configChanged = () => configSignal.emit();
+const windowAdded = win => addedSignal.emit(win);
+const windowRemoved = win => removedSignal.emit(win);
 const shortcuts = {};
 const unregistered = [];
 const win = (resourceClass, caption = "") => ({ resourceClass, caption, internalId: String(nextId++), normalWindow: true, minimized: false, skipTaskbar: false, desktops: [], captionChanged: signal(), windowClassChanged: signal() });
@@ -23,17 +30,19 @@ const workspace = {
     stackingOrder: [panel, term, chat],
     activeWindow: null,
     currentDesktop: "desktop 1",
-    windowAdded: { connect(f) { windowAdded = f; } },
-    windowRemoved: { connect(f) { windowRemoved = f; } },
+    windowAdded: addedSignal,
+    windowRemoved: removedSignal,
 };
 
-vm.runInNewContext(fs.readFileSync(__dirname + "/script/contents/code/main.js", "utf8"), {
+const runtime = vm.createContext({});
+vm.runInContext(fs.readFileSync(__dirname + "/script/contents/code/main.js", "utf8"), runtime);
+runtime.start({
     workspace,
-    print: message => messages.push(message),
+    logMessage: message => messages.push(message),
     readConfig: () => config,
     registerShortcut: (id, label, keys, callback) => { shortcuts[id] = { keys, callback }; },
     callDBus: (...args) => { if (args[3] === "unregister") unregistered.push(args[5]); },
-    options: { configChanged: { connect(f) { configChanged = f; } } },
+    options: { configChanged: configSignal },
 });
 const reload = (text) => { config = text; configChanged(); };
 
@@ -145,5 +154,31 @@ windowAdded(alreadyHidden);
 reload("Private | private | | Meta+P");
 reload("");
 assert.ok(alreadyHidden.skipTaskbar && panel.skipTaskbar);
+
+// An unbound row stays on the taskbar but remains toggleable if its action is
+// assigned a shortcut in KDE's global shortcuts editor.
+reload("Unbound | example | Document C | ");
+assert.ok(!replacement.skipTaskbar);
+workspace.activeWindow = null;
+shortcuts.kwake_Unbound.callback();
+assert.strictEqual(workspace.activeWindow, replacement);
+
+reload("Unbound | example | Document C | \nBound | example | Document C | Meta+B");
+assert.ok(replacement.skipTaskbar);
+reload("Unbound | example | Document C | \nBound | example | Document C | ");
+assert.ok(!replacement.skipTaskbar);
+
+reload("Private | private | | Meta+P");
+reload("Private | private | | ");
+assert.ok(alreadyHidden.skipTaskbar);
+
+reload("Term | com.mitchellh.ghostty | | Meta+T\nPrivate | private | | Meta+P");
+assert.ok(term.skipTaskbar && alreadyHidden.skipTaskbar);
+runtime.stop();
+assert.ok(!term.skipTaskbar && alreadyHidden.skipTaskbar && panel.skipTaskbar);
+configChanged();
+term.captionChanged.emit();
+windowAdded(win("com.mitchellh.ghostty"));
+assert.ok(!term.skipTaskbar);
 
 console.log("main.js self-check passed");

@@ -13,6 +13,8 @@ BUNDLE="kwake.run"
 # Empty means: the plugin for this CPU embedded next to this script.
 PLUGIN_FILE=""
 ONLINE=0
+UNINSTALL=0
+REMOVE_SYSTEM_PLUGIN=0
 
 usage() {
     cat <<USAGE
@@ -25,7 +27,8 @@ to this script in a release's .run file. Nothing is downloaded.
                   described in the README.
   --online        Download the latest release's installer, verify it and run
                   it, installing or updating everything to that release.
-  --uninstall     Remove everything this installed.
+  --uninstall     Remove the per-user installation.
+  --remove-system-plugin  With --uninstall, also remove the shared settings page.
   -h, --help      Show this message.
 USAGE
 }
@@ -36,11 +39,28 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || { echo "error: --plugin needs a file" >&2; usage >&2; exit 1; }
             PLUGIN_FILE="$2"; shift 2 ;;
         --online) ONLINE=1; shift ;;
-        --uninstall) exec "$SOURCE_DIR/uninstall.sh" ;;
+        --uninstall) UNINSTALL=1; shift ;;
+        --remove-system-plugin) REMOVE_SYSTEM_PLUGIN=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
 done
+if [[ $REMOVE_SYSTEM_PLUGIN -eq 1 && $UNINSTALL -eq 0 ]]; then
+    echo "error: --remove-system-plugin requires --uninstall" >&2
+    usage >&2
+    exit 1
+fi
+if [[ $UNINSTALL -eq 1 ]]; then
+    [[ $ONLINE -eq 0 && -z "$PLUGIN_FILE" ]] || {
+        echo "error: --uninstall cannot be combined with --online or --plugin" >&2
+        usage >&2
+        exit 1
+    }
+    if [[ $REMOVE_SYSTEM_PLUGIN -eq 1 ]]; then
+        exec "$SOURCE_DIR/uninstall.sh" --remove-system-plugin
+    fi
+    exec "$SOURCE_DIR/uninstall.sh"
+fi
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # The directory KWin keeps its own config plugins in. It exists wherever KWin
@@ -104,6 +124,8 @@ install_plugin() {
     sudo install -m 644 "$PLUGIN_FILE" "$dest/$PLUGIN_ID.so"
 }
 
+install_plugin
+
 qdbus_cmd=""
 for candidate in qdbus6 qdbus-qt6 qdbus; do
     if have "$candidate"; then qdbus_cmd="$candidate"; break; fi
@@ -114,13 +136,11 @@ rm -rf "$SCRIPT_DIR"
 mkdir -p "$SCRIPT_DIR"
 cp -r "$SOURCE_DIR/script/." "$SCRIPT_DIR/"
 
-install_plugin
-
 echo "==> Enabling the script"
 kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true
 
 if [[ -n "$qdbus_cmd" ]]; then
-    # A loaded script owns taskbar changes that disappear from memory when unloaded.
+    # Kwake 3.1 and earlier need their config cleared to restore windows before unload.
     if [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null || true) == true ]]; then
         saved_entries=$(kreadconfig6 --file kwinrc --group Script-kwake --key Entries)
         restore_entries() { kwriteconfig6 --file kwinrc --group Script-kwake --key Entries "$saved_entries"; }
@@ -133,14 +153,13 @@ if [[ -n "$qdbus_cmd" ]]; then
     fi
     echo "==> Loading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_ID" >/dev/null 2>&1 || true
-    # unloadScript only schedules the removal, and loadScript refuses a name
-    # that is still loaded, so wait for the old copy to be gone.
+    # Wait for deferred deletion before loading another script with the same name.
     for _ in {1..50}; do
         [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null) == true ]] || break
         sleep 0.1
     done
-    "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-        "$SCRIPT_DIR/contents/code/main.js" "$PLUGIN_ID" >/dev/null 2>&1 || true
+    "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadDeclarativeScript \
+        "$SCRIPT_DIR/contents/ui/main.qml" "$PLUGIN_ID" >/dev/null 2>&1 || true
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
 fi
 

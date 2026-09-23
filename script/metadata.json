@@ -5,12 +5,12 @@
         "Description": "Show or hide chosen applications with a global shortcut.",
         "Icon": "preferences-system-windows",
         "Id": "kwake",
-        "Version": "3.1.0",
+        "Version": "3.2.0",
         "License": "GPL-3.0-or-later",
         "Category": "KWinscript"
     },
 
-    "X-Plasma-API": "javascript",
-    "X-Plasma-MainScript": "code/main.js",
+    "X-Plasma-API": "declarativescript",
+    "X-Plasma-MainScript": "ui/main.qml",
     "X-KDE-ConfigModule": "kwin/effects/configs/kwake"
 }

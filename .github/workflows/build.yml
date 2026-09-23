@@ -24,6 +24,24 @@ jobs:
       - name: Run checks
         run: ./check.sh
 
+  lifecycle:
+    name: KWin lifecycle (Debian 13)
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install runtime tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends kwin-wayland kdialog python3 \
+            dbus-daemon qdbus-qt6 libkf6config-bin libgl1-mesa-dri libcap2-bin qt6-wayland
+          # The container cannot grant KWin's file-based CAP_SYS_NICE capability.
+          setcap -r /usr/bin/kwin_wayland
+
+      - name: Test script enable, disable and unload
+        run: python3 tests/test_lifecycle.py
+
   plugin:
     name: Build with clazy (Debian 13, ${{ matrix.arch }})
     # Each architecture builds natively on its own runner.
@@ -66,7 +84,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, load-test]
+    needs: [lint, lifecycle, load-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
