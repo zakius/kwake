@@ -34,4 +34,14 @@ mkdir -p dist
 for plugin in kcm/build-release/bin/kwin/effects/configs/*.so; do
     cp "$plugin" "dist/$(basename "$plugin" .so)-$(uname -m).so"
 done
+
+# The .deb's dependencies, with version floors from these Debian 13 libraries.
+# dpkg-shlibdeps insists on running next to a debian/control.
+shlibs=$(mktemp -d)
+mkdir "$shlibs/debian"
+printf 'Source: x\n\nPackage: x\nArchitecture: any\n' > "$shlibs/debian/control"
+for plugin in dist/*-"$(uname -m)".so; do
+    (cd "$shlibs" && dpkg-shlibdeps -O "$OLDPWD/$plugin") |
+        sed 's/^shlibs:Depends=//' > "${plugin%.so}.deb-depends"
+done
 ls -l dist

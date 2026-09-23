@@ -17,6 +17,28 @@ Kwake needs KDE Plasma 6 with Qt 6.8 and KDE Frameworks 6.13 or newer, such as
 Debian 13 or Ubuntu 25.10 and later. Ubuntu 24.04 (Plasma 5) and 25.04
 (Frameworks 6.12) are too old.
 
+### Debian, Ubuntu and Fedora
+
+```sh
+# Debian and Ubuntu (kwake-arm64.deb on ARM64)
+curl -LO https://github.com/zakius/kwake/releases/latest/download/kwake-amd64.deb
+sudo apt install ./kwake-amd64.deb
+
+# Fedora (kwake-aarch64.rpm on ARM64)
+curl -LO https://github.com/zakius/kwake/releases/latest/download/kwake-x86_64.rpm
+sudo dnf install ./kwake-x86_64.rpm
+```
+
+The package installs Kwake for every user on the machine. Each user turns it on
+in **System Settings → Window Management → KWin Scripts** and adds applications
+with the settings icon next to Kwake. The package replaces a copy that
+`kwake.run` installed earlier; your list of applications is kept.
+
+To update, install a newer package the same way. Sessions where Kwake is
+running switch to the new version at once.
+
+### Other distributions
+
 Download the installer from the latest release and run it:
 
 ```sh
@@ -34,7 +56,7 @@ Then add your applications in **System Settings → Window Management → KWin
 Scripts**, using the settings icon next to Kwake. Restart System Settings first
 if it was open during the install.
 
-### Updating
+#### Updating
 
 ```sh
 sh kwake.run -- --online
@@ -46,6 +68,12 @@ before it belong to the `.run` wrapper itself. `sh kwake.run --info` shows
 which release a file is.
 
 ## Uninstall
+
+A package is removed with `sudo apt remove kwake` or `sudo dnf remove kwake`.
+This puts any hidden windows back on the taskbar. Each user's list of
+applications stays in their `kwinrc`.
+
+For an install from `kwake.run`:
 
 ```sh
 sh kwake.run -- --uninstall
@@ -159,8 +187,9 @@ disconnects window callbacks when the script unloads.
 
 The settings page links against Qt 6 and KDE Frameworks 6 without linking
 against KWin. Release builds use Debian 13's Qt 6.8 and Frameworks 6.13.
-CI checks their shared-library dependencies and symbols on Debian 13,
-Ubuntu 26.04 and Fedora 44, for x86_64 and ARM64. These checks do not open
+CI installs the `.deb` or `.rpm` with the distribution's package manager and
+checks the installed plugin's shared-library dependencies and symbols on
+Debian 13, Ubuntu 26.04 and Fedora 44, for x86_64 and ARM64. These checks do not open
 the settings page or test a live Plasma session.
 
 Newer Qt 6 and Frameworks 6 versions are expected to work, subject to the
@@ -214,11 +243,15 @@ git tag -a v1.2.3 -m "v1.2.3"
 git push origin v1.2.3
 ```
 
-CI builds the settings page on Debian 13 for x86_64 and ARM64 and checks its
-shared-library dependencies and symbols on Debian 13, Ubuntu 26.04 and Fedora 44.
-After all checks pass, CI publishes a GitHub release with `kwake.run`
-and `SHA256SUMS`. Makeself builds the `.run` file from `ci/make-bundle.sh`.
-Do not edit a `.run` file by hand.
+CI builds the settings page on Debian 13 for x86_64 and ARM64, packages it with
+[nfpm](https://nfpm.goreleaser.com/) (`ci/make-packages.sh`), and installs the
+packages on Debian 13, Ubuntu 26.04 and Fedora 44 to check that their
+dependencies resolve and the plugin loads. After all checks pass, CI publishes
+a GitHub release with `kwake.run`, the `.deb` and `.rpm` packages, and
+`SHA256SUMS`. Makeself builds the `.run` file from `ci/make-bundle.sh`.
+Do not edit a `.run` file by hand. The `.deb` dependencies come from
+`dpkg-shlibdeps` in `ci/build-plugin.sh`; the Qt floor is the Debian 13
+build's.
 
 ## Licence
 

@@ -58,12 +58,39 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-${{ matrix.arch }}
-          path: dist/*.so
+          path: dist/*
+          if-no-files-found: error
+
+  package:
+    name: Build .deb and .rpm packages
+    needs: plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plugin-*
+          path: dist
+          merge-multiple: true
+
+      - name: Package
+        run: |
+          curl -fsSLo /tmp/nfpm.deb https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_amd64.deb
+          sudo dpkg -i /tmp/nfpm.deb
+          ci/make-packages.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
           if-no-files-found: error
 
   load-test:
-    name: Loads on ${{ matrix.image }} (${{ matrix.arch }})
-    needs: plugin
+    name: Installs on ${{ matrix.image }} (${{ matrix.arch }})
+    needs: package
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -75,10 +102,10 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-${{ matrix.arch }}
+          name: packages
           path: dist
 
-      - name: Load the plugin
+      - name: Install the package and load the plugin
         run: docker run --rm -v "$PWD":/src -w /src ${{ matrix.image }} bash ci/load-test.sh
 
   release:
@@ -97,6 +124,11 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+
       - name: Build the self-contained installer
         run: |
           sudo apt-get update
@@ -104,12 +136,14 @@ jobs:
           ci/make-bundle.sh "$GITHUB_REF_NAME"
 
       - name: Checksums
-        run: cd dist && sha256sum -- *.run > SHA256SUMS
+        run: cd dist && sha256sum -- *.run *.deb *.rpm > SHA256SUMS
 
       - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.run
+            dist/*.deb
+            dist/*.rpm
             dist/SHA256SUMS
           generate_release_notes: true
           fail_on_unmatched_files: true
