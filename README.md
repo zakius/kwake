@@ -15,6 +15,10 @@ Kwake needs KDE Plasma 6 with Qt 6.8 and KDE Frameworks 6.13 or newer, such as
 Debian 13, Ubuntu 25.10 or Fedora 44. Ubuntu 24.04 (Plasma 5) and 25.04
 (Frameworks 6.12) are too old.
 
+Install the package if your distribution uses `.deb` or `.rpm`. Your package
+manager then tracks the files and handles updates and removal. Use `kwake.run`
+only on other distributions.
+
 ### Debian, Ubuntu and Fedora
 
 ```sh
@@ -36,6 +40,10 @@ new version at once. The package also replaces an earlier install from
 `kwake.run` and keeps its list of applications.
 
 ### Other distributions
+
+Use this installer only if your distribution cannot install a `.deb` or an
+`.rpm`. On Debian, Ubuntu and Fedora, the packages above are the better
+choice.
 
 ```sh
 curl -LO https://github.com/zakius/kwake/releases/latest/download/kwake.run
