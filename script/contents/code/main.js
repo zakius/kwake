@@ -2,6 +2,8 @@
 // Storage is one line per application in kwinrc [Script-kwake] Entries:
 //     Name | resourceClass | caption | shortcut
 // Class is an exact, case-insensitive match; caption is an optional substring.
+// A row is ignored if an earlier row has the same id, and loses its shortcut if
+// an earlier row has the same shortcut.
 
 const SHORTCUT_PREFIX = "kwake_";
 const KGA_SERVICE = "org.kde.kglobalaccel";
@@ -10,7 +12,7 @@ let options;
 let readConfig;
 let registerShortcut;
 let callDBus;
-let print;
+let log;
 
 // id -> entry, for every application currently configured.
 let entries = {};
@@ -25,10 +27,8 @@ let hidden = {};
 
 function parseEntries(text) {
     const parsed = {};
+    const usedShortcuts = [];
     text.split("\n").forEach((line) => {
-        line = line.trim();
-        if (!line || line.charAt(0) === "#") return;
-
         const f = line.split("|").map((s) => s.trim());
         const name = f[0];
         if (!name || !f[1]) return;
@@ -36,13 +36,20 @@ function parseEntries(text) {
         const id = SHORTCUT_PREFIX + name.replace(/[^A-Za-z0-9_-]/g, "_");
         if (parsed[id]) return;
 
+        // A shortcut on the | key contains the separator itself.
+        let shortcut = f.slice(3).join("|");
+        // KGlobalAccel gives a key to one action only. Without a working
+        // shortcut the row must count as unbound, or its window would leave
+        // the taskbar with no way to bring it back.
+        if (usedShortcuts.includes(shortcut)) shortcut = "";
+        if (shortcut) usedShortcuts.push(shortcut);
+
         parsed[id] = {
             name: name,
             id: id,
-            resourceClass: f[1] || "",
+            resourceClass: f[1],
             caption: f[2] || "",
-            // A shortcut on the | key contains the separator itself.
-            shortcut: f.slice(3).join("|"),
+            shortcut: shortcut,
         };
     });
     return parsed;
@@ -113,7 +120,8 @@ function windowAdded(win) {
     refreshTaskbarState();
 }
 
-// Toggle windows: bring target to top, minimize others
+// Minimise the target if it has focus; otherwise raise it. Either way the other
+// managed windows are minimised, so at most one of them shows at a time.
 function toggleWindow(id) {
     const entry = entries[id];
     if (!entry) return; // removed from the config since this shortcut was bound
@@ -121,20 +129,19 @@ function toggleWindow(id) {
     const managed = refreshTaskbarState();
     const target = managed.find((win) => String(win.internalId) === selected[id]);
     if (!target) return;
-    let isTopMost = workspace.activeWindow === target;
 
-    if (isTopMost) {
-        // Target is on top: minimize it, activate next in stack
+    // Read before the loop below: when it minimises the focused window, KWin
+    // moves focus at once, possibly to the target.
+    const hadFocus = workspace.activeWindow === target;
+    managed.forEach((win) => {
+        if (win !== target) win.minimized = true;
+    });
+    if (hadFocus) {
+        // KWin then gives focus to the most recently used window that is still
+        // open. With every managed window minimised, that is one outside the
+        // list.
         target.minimized = true;
-        let others = managed.filter((c) => c !== target && !c.minimized);
-        if (others.length > 0) {
-            workspace.activeWindow = others[others.length - 1];
-        }
     } else {
-        // Target not on top: minimize all others, bring target to front
-        managed.forEach((client) => {
-            if (client !== target) client.minimized = true;
-        });
         // Pull the window to this desktop instead of switching to its own.
         // An empty list means the window is on all desktops.
         if (target.desktops.length && !target.desktops.includes(workspace.currentDesktop)) {
@@ -147,6 +154,8 @@ function toggleWindow(id) {
 
 function applyConfig() {
     const updated = parseEntries(readConfig("Entries", "").toString());
+    // Every id in selected is also in entries: findWindow only adds ids of
+    // current entries, and this loop drops the ones that go away.
     for (const id in selected) {
         if (!updated[id] || updated[id].resourceClass !== entries[id].resourceClass || updated[id].caption !== entries[id].caption) {
             delete selected[id];
@@ -158,7 +167,7 @@ function applyConfig() {
         if (!entries[id]) {
             // Entry deleted: free its key combo and drop it from the
             // Shortcuts page instead of leaving a dead binding behind.
-            print(`Kwake: dropping shortcut ${id}`);
+            log(`Kwake: dropping shortcut ${id}`);
             unregisterShortcut(id);
             delete registered[id];
         }
@@ -177,7 +186,7 @@ function applyConfig() {
     }
 
     refreshTaskbarState();
-    print(`Kwake: ${Object.keys(entries).length} applications configured`);
+    log(`Kwake: ${Object.keys(entries).length} applications configured`);
 }
 
 function stop() {
@@ -202,7 +211,7 @@ function start(host) {
     readConfig = host.readConfig;
     registerShortcut = host.registerShortcut;
     callDBus = host.callDBus;
-    print = host.logMessage;
+    log = host.logMessage;
 
     applyConfig();
     workspace.stackingOrder.forEach(watchWindow);
@@ -220,7 +229,7 @@ function start(host) {
         (names) => {
             names.forEach((name) => {
                 if (name.startsWith(SHORTCUT_PREFIX) && !entries[name]) {
-                    print(`Kwake: dropping orphaned shortcut ${name}`);
+                    log(`Kwake: dropping orphaned shortcut ${name}`);
                     unregisterShortcut(name);
                 }
             });

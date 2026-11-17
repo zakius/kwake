@@ -22,7 +22,7 @@ KCM.SimpleKCM {
     // The last value this form wrote. Echoes of it are ignored, so typing never
     // rebuilds the model and steals focus from the field being edited.
     property string written: ""
-    // Set when two names map to the same shortcut id; see findCollision().
+    // Set when two rows get the same shortcut id or shortcut; see findCollision().
     property string collision: ""
 
     ListModel {
@@ -38,7 +38,7 @@ KCM.SimpleKCM {
         apps.clear()
         text.split("\n").forEach(line => {
             const fields = line.split("|").map(field => field.trim())
-            if (!fields[0] || fields[0].startsWith("#")) {
+            if (!fields[0]) {
                 return
             }
             apps.append({
@@ -54,9 +54,11 @@ KCM.SimpleKCM {
     }
 
     // The script builds each shortcut id from the name with this same rule and
-    // ignores any later entry whose id is taken.
+    // ignores any later entry whose id is taken. Of the remaining entries, only
+    // the first with a given shortcut gets it.
     function findCollision() {
-        const seen = {}
+        const names = {}
+        const shortcutOwners = {}
         for (let i = 0; i < apps.count; ++i) {
             const app = apps.get(i)
             const name = clean(app.name)
@@ -64,10 +66,19 @@ KCM.SimpleKCM {
                 continue
             }
             const id = name.replace(/[^A-Za-z0-9_-]/g, "_")
-            if (seen[id] !== undefined) {
-                return i18n("“%1” and “%2” get the same shortcut, so Kwake ignores “%2”. Names differing only in spaces or non-ASCII letters collide; rename one of them.", seen[id], name)
+            if (names[id] !== undefined) {
+                return i18n("“%1” and “%2” get the same shortcut id, so Kwake ignores “%2”. Names differing only in spaces or non-ASCII letters collide; rename one of them.", names[id], name)
             }
-            seen[id] = name
+            names[id] = name
+
+            if (!app.shortcut) {
+                continue
+            }
+            const owner = shortcutOwners[app.shortcut]
+            if (owner !== undefined) {
+                return i18n("“%1” and “%2” have the same shortcut, so it only works for “%1”. Give “%2” a different one.", owner, name)
+            }
+            shortcutOwners[app.shortcut] = name
         }
         return ""
     }
@@ -94,7 +105,10 @@ KCM.SimpleKCM {
         apps.append({ uid: nextUid++, name: "", windowClass: "", caption: "", shortcut: "" })
     }
 
-    Component.onCompleted: parse(kcm.entries)
+    Component.onCompleted: {
+        written = kcm.entries
+        parse(kcm.entries)
+    }
 
     Connections {
         target: kcm

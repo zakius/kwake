@@ -7,8 +7,9 @@
         Name | resourceClass | caption | shortcut
 
     The form lives in ui/main.qml, which parses and serialises that string.
-    This class only loads and saves it, and runs the window picker, which QML
-    cannot reach on its own because it needs D-Bus.
+    This class loads and saves it, drops the saved binding of every shortcut a
+    save changes, and runs the window picker. QML cannot reach the last two on
+    its own because they need D-Bus.
 */
 
 #include <KConfigGroup>
@@ -20,6 +21,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QHash>
 #include <QKeySequence>
 
 using namespace Qt::StringLiterals;
@@ -29,6 +31,46 @@ namespace
 constexpr auto kConfigFile = "kwinrc"_L1;
 constexpr auto kConfigGroup = "Script-kwake"_L1;
 constexpr auto kConfigKey = "Entries"_L1;
+
+// Shortcut id -> shortcut for every row the script acts on. This repeats the
+// rules of parseEntries() in script/contents/code/main.js and must match them.
+QHash<QString, QString> shortcutsById(const QString &entries)
+{
+    QHash<QString, QString> shortcuts;
+    QStringList used;
+    const QStringList lines = entries.split(u'\n');
+    for (const QString &line : lines) {
+        QStringList fields;
+        const QStringList rawFields = line.split(u'|');
+        for (const QString &field : rawFields) {
+            fields.append(field.trimmed());
+        }
+        if (fields.size() < 2 || fields.at(0).isEmpty() || fields.at(1).isEmpty()) {
+            continue;
+        }
+
+        QString id = u"kwake_"_s;
+        const QString name = fields.at(0);
+        for (const QChar ch : name) {
+            const bool letter = (ch >= u'a' && ch <= u'z') || (ch >= u'A' && ch <= u'Z');
+            const bool digit = ch >= u'0' && ch <= u'9';
+            id.append(letter || digit || ch == u'_' || ch == u'-' ? ch : QChar(u'_'));
+        }
+        if (shortcuts.contains(id)) {
+            continue;
+        }
+
+        QString shortcut = fields.mid(3).join(u'|');
+        if (used.contains(shortcut)) {
+            shortcut.clear();
+        }
+        if (!shortcut.isEmpty()) {
+            used.append(shortcut);
+        }
+        shortcuts.insert(id, shortcut);
+    }
+    return shortcuts;
+}
 }
 
 class KwakeKCM : public KQuickConfigModule
@@ -50,11 +92,11 @@ public:
 
     void setEntries(const QString &entries)
     {
-        if (m_entries == entries) {
-            return;
+        if (m_entries != entries) {
+            m_entries = entries;
+            Q_EMIT entriesChanged();
         }
-        m_entries = entries;
-        Q_EMIT entriesChanged();
+        // Not only on a change: load() must set these for an unchanged value too.
         setNeedsSave(m_entries != m_saved);
         setRepresentsDefaults(m_entries.isEmpty());
     }
@@ -63,7 +105,6 @@ public:
     {
         m_saved = KSharedConfig::openConfig(kConfigFile)->group(kConfigGroup).readEntry(kConfigKey, QString());
         setEntries(m_saved);
-        setNeedsSave(false);
     }
 
     void save() override
@@ -71,6 +112,22 @@ public:
         auto config = KSharedConfig::openConfig(kConfigFile);
         config->group(kConfigGroup).writeEntry(kConfigKey, m_entries);
         config->sync();
+
+        // KGlobalAccel prefers the binding it has saved over the one an action
+        // registers with. The script drops the saved one before it registers a
+        // changed shortcut, but only while it runs, so a change saved while
+        // Kwake is disabled would never take effect.
+        const QHash<QString, QString> before = shortcutsById(m_saved);
+        const QHash<QString, QString> after = shortcutsById(m_entries);
+        for (auto it = before.cbegin(); it != before.cend(); ++it) {
+            if (after.contains(it.key()) && after.value(it.key()) == it.value()) {
+                continue;
+            }
+            auto unregister = QDBusMessage::createMethodCall(u"org.kde.kglobalaccel"_s, u"/kglobalaccel"_s, u"org.kde.KGlobalAccel"_s, u"unregister"_s);
+            unregister.setArguments({u"kwin"_s, it.key()});
+            QDBusConnection::sessionBus().send(unregister);
+        }
+
         m_saved = m_entries;
         setNeedsSave(false);
 

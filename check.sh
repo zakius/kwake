@@ -9,7 +9,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 qmllint=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
 
 echo "==> KWin script"
-node test_main.js
+node tests/test_main.js
 
 echo "==> Metadata"
 # Parsing both files also validates them. The settings page only opens if the
@@ -29,7 +29,7 @@ if (!found || found[1] !== id)
 '
 
 echo "==> Shell scripts"
-shellcheck install.sh uninstall.sh check.sh tests/*.sh ci/*.sh
+shellcheck install.sh uninstall.sh plugin-dirs.sh check.sh tests/*.sh ci/*.sh
 bash tests/test_uninstall.sh
 
 echo "==> QML (qmllint)"

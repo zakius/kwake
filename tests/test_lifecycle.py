@@ -13,7 +13,8 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def run_session(root):
-    qdbus = shutil.which('qdbus6') or shutil.which('qdbus') or '/usr/lib/qt6/bin/qdbus'
+    # Debian and Arch name it qdbus6, Fedora qdbus-qt6.
+    qdbus = shutil.which('qdbus6') or shutil.which('qdbus-qt6') or shutil.which('qdbus') or '/usr/lib/qt6/bin/qdbus'
     processes = []
     log_path = root / 'kwin.log'
     log = log_path.open('w')
@@ -42,7 +43,7 @@ def run_session(root):
         name = f'inspect-{counter}'
         marker = f'KWAKE_STATE_{counter} '
         script = root / f'{name}.js'
-        script.write_text(setup + '\nprint(' + json.dumps(marker) + '+ JSON.stringify(workspace.stackingOrder.map(w => ({caption:w.caption, hidden:w.skipTaskbar, minimized:w.minimized}))));')
+        script.write_text(setup + '\nprint(' + json.dumps(marker) + '+ JSON.stringify(workspace.stackingOrder.map(w => ({caption:w.caption, hidden:w.skipTaskbar, minimized:w.minimized, active:w === workspace.activeWindow}))));')
         script_id = bus('/Scripting', 'org.kde.kwin.Scripting.loadScript', str(script), name)
         bus('/Scripting/Script' + script_id, 'org.kde.kwin.Script.run')
         wait_for(lambda: marker in log_path.read_text())
@@ -73,8 +74,18 @@ def run_session(root):
             inspect('for (const w of workspace.stackingOrder) if (w.caption === "Kwake managed") w.minimized = true;')
             command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
             wait_for(lambda: not next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake managed'))
+            # Another managed window is brought up by hand and has focus. The shortcut
+            # must raise its own window, not hide it: KWin moves focus to that
+            # window the moment Kwake minimises the other one.
+            inspect('for (const w of workspace.stackingOrder) if (w.caption === "Kwake prehidden") { w.minimized = false; workspace.activeWindow = w; }')
+            wait_for(lambda: next(w['active'] for w in inspect() if w['caption'] == 'Kwake prehidden'))
+            command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
+            wait_for(lambda: next(w['active'] and not w['minimized'] for w in inspect() if w['caption'] == 'Kwake managed'))
+            assert next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake prehidden')
             command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
             wait_for(lambda: next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake managed'))
+            # Focus goes back to a window outside the list, not to another managed one.
+            wait_for(lambda: next(w['active'] for w in inspect() if w['caption'] == 'Kwake untouched'))
             if cycle == 2:
                 bus('/Scripting', 'org.kde.kwin.Scripting.unloadScript', 'kwake')
                 wait_for(lambda: bus('/Scripting', 'org.kde.kwin.Scripting.isScriptLoaded', 'kwake') == 'false')
@@ -120,7 +131,7 @@ else:
         env = dict(os.environ, XDG_RUNTIME_DIR=str(root / 'runtime'), XDG_CONFIG_HOME=str(root / 'config'),
                    XDG_DATA_HOME=str(root / 'data'), XDG_CACHE_HOME=str(root / 'cache'),
                    QT_QPA_PLATFORM='offscreen', QT_NO_XDG_DESKTOP_PORTAL='1', QT_ACCESSIBILITY='0',
-                   LIBGL_ALWAYS_SOFTWARE='1', KWIN_COMPOSE='Q')
+                   LIBGL_ALWAYS_SOFTWARE='1', QT_FORCE_STDERR_LOGGING='1', QT_LOGGING_RULES='js.debug=true')
         for name in ('DISPLAY', 'WAYLAND_DISPLAY', 'SESSION_MANAGER'):
             env.pop(name, None)
         result = subprocess.run(['dbus-run-session', '--', sys.executable, __file__, str(root)], env=env, capture_output=True, text=True, timeout=90)

@@ -93,8 +93,7 @@ remove it as well, add `--remove-system-plugin`. This needs root.
   minimises the windows of the other applications in your list. A window on
   another virtual desktop moves to the current one.
 - Press the shortcut again while the window has focus to minimise it. Focus
-  moves to the last application in your list with a window that is not
-  minimised.
+  returns to the window outside your list that you used last.
 - If the application is not running, the shortcut does nothing. Kwake does not
   start applications.
 
@@ -132,8 +131,9 @@ Name | window class | title | shortcut
 
 Each name becomes a shortcut id: `kwake_` followed by the name, with every
 character other than ASCII letters, digits, `_` and `-` replaced by `_`. If two
-names give the same id, Kwake uses only the first entry. The settings page
-warns about this.
+names give the same id, Kwake uses only the first entry. If two entries have
+the same shortcut, it works only for the first, and the other entry behaves as
+if it had none. The settings page warns about both.
 
 ## Compatibility
 
@@ -195,8 +195,8 @@ install and stops before it changes anything.
 
 This needs `node`, `shellcheck` and `qmllint`, and runs:
 
-- the script against a fake KWin (`test_main.js`): toggling, shortcut changes
-  and taskbar restore
+- the script against a fake KWin (`tests/test_main.js`): toggling, shortcut
+  changes and taskbar restore
 - `qmllint` on the settings form, with unknown properties as errors
 - ShellCheck on the shell scripts, and isolated uninstall tests
 - a check that the metadata points the settings page at the right plugin
@@ -210,8 +210,8 @@ To test the script lifecycle in a separate headless KWin session:
 python3 tests/test_lifecycle.py
 ```
 
-This needs `kwin_wayland`, `kdialog`, `qdbus6`, `kwriteconfig6`,
-`dbus-run-session` and Python 3. It uses temporary configuration and a private
+This needs `kwin_wayland`, `kdialog`, `qdbus6` (`qdbus-qt6` on Fedora),
+`kwriteconfig6`, `dbus-run-session` and Python 3. It uses temporary configuration and a private
 D-Bus session, so your desktop is not affected. It tests real shortcut
 activation, disable and re-enable, direct unload, and taskbar restore.
 
@@ -226,6 +226,9 @@ podman run --rm -v "$PWD":/src -w /src debian:trixie bash ci/build-plugin.sh
 ```
 
 ### Releases
+
+Set `Version` in `script/metadata.json` first; the packages take their version
+from it, and CI refuses a tag that does not match.
 
 ```sh
 git tag -a v1.2.3 -m "v1.2.3"

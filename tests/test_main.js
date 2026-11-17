@@ -1,4 +1,5 @@
-// Self-check for script/contents/code/main.js against a fake KWin. Run: node test_main.js
+// Self-check for script/contents/code/main.js against a fake KWin. Run: node tests/test_main.js
+// The scenarios run in order and share one set of windows.
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
@@ -35,7 +36,7 @@ const workspace = {
 };
 
 const runtime = vm.createContext({});
-vm.runInContext(fs.readFileSync(__dirname + "/script/contents/code/main.js", "utf8"), runtime);
+vm.runInContext(fs.readFileSync(__dirname + "/../script/contents/code/main.js", "utf8"), runtime);
 runtime.start({
     workspace,
     logMessage: message => messages.push(message),
@@ -54,9 +55,13 @@ assert.ok(term.skipTaskbar && chat.skipTaskbar);
 shortcuts.kwake_Term.callback();
 assert.strictEqual(workspace.activeWindow, term);
 assert.ok(chat.minimized && !term.minimized);
-// ...and toggling it again while focused minimises it.
+// ...and toggling it again while focused minimises it. KWin chooses the next
+// focused window. So that it cannot choose a managed one, a managed window
+// that was brought back up by hand is minimised too.
+chat.minimized = false;
 shortcuts.kwake_Term.callback();
-assert.ok(term.minimized);
+assert.ok(term.minimized && chat.minimized);
+assert.strictEqual(workspace.activeWindow, term);
 
 // A window on another desktop is pulled to this one; all-desktop windows stay put.
 term.desktops = ["desktop 2"];
@@ -77,20 +82,25 @@ reload("Term | com.mitchellh.ghostty |  | Meta+T");
 assert.deepStrictEqual(unregistered, ["kwake_Chat", "kwake_Term"]);
 assert.strictEqual(shortcuts.kwake_Term.keys, "Meta+T");
 
-// No matching window is not an error.
+// A shortcut whose application is not running does nothing and logs nothing.
 reload("Gone | no-such-app |  | ");
-shortcuts.kwake_Gone.callback();
-
 const before = messages.length;
 shortcuts.kwake_Gone.callback();
 assert.strictEqual(messages.length, before);
 
+// A row without a window class is ignored: no shortcut, no hidden windows.
 reload("Incomplete | | | Meta+X");
 assert.ok(!term.skipTaskbar && !chat.skipTaskbar);
 assert.ok(!shortcuts.kwake_Incomplete);
+// The class must match in full, not in part.
 reload("Partial | ghostty | | Meta+X");
 assert.ok(!term.skipTaskbar);
+// A line starting with # is a row like any other, not a comment.
+reload("#Term | com.mitchellh.ghostty | | Meta+X");
+assert.ok(term.skipTaskbar);
 
+// Of several matching windows, a row takes the focused one and leaves the
+// others alone, also when another one has focus later.
 const first = win("example", "Document A");
 const second = win("example", "Document B");
 workspace.stackingOrder.push(first, second);
@@ -105,6 +115,7 @@ shortcuts.kwake_Example.callback();
 assert.strictEqual(workspace.activeWindow, first);
 assert.ok(!second.minimized && !second.skipTaskbar);
 
+// The row keeps its window when the title stops matching the filter.
 first.caption = "Unrelated title";
 first.captionChanged.emit();
 configChanged();
@@ -112,6 +123,7 @@ shortcuts.kwake_Example.callback();
 assert.ok(first.minimized && first.skipTaskbar);
 assert.ok(!second.skipTaskbar);
 
+// When its window closes, the row picks the next match, or none.
 workspace.stackingOrder = workspace.stackingOrder.filter(w => w !== first);
 windowRemoved(first);
 assert.ok(second.skipTaskbar);
@@ -124,6 +136,7 @@ const emptyMessages = messages.length;
 shortcuts.kwake_Example.callback();
 assert.strictEqual(messages.length, emptyMessages);
 
+// A new window is picked up once its title matches the filter.
 const replacement = win("example", "Loading");
 workspace.stackingOrder.push(replacement);
 windowAdded(replacement);
@@ -132,6 +145,8 @@ replacement.caption = "Document C";
 replacement.captionChanged.emit();
 assert.ok(replacement.skipTaskbar);
 
+// With no matching window focused, a row takes the topmost match. Changing
+// the row's title filter makes it pick again.
 reload("");
 assert.ok(!replacement.skipTaskbar);
 const topmost = win("example", "Document D");
@@ -147,6 +162,14 @@ assert.ok(replacement.skipTaskbar && !topmost.skipTaskbar);
 reload("Pipe | vesktop |  | Ctrl+|");
 assert.strictEqual(shortcuts.kwake_Pipe.keys, "Ctrl+|");
 
+// Only the first row with a shortcut gets it. The second is registered without
+// one, so its window stays on the taskbar.
+reload("Term | com.mitchellh.ghostty | | Meta+D\nChat | vesktop | | Meta+D");
+assert.strictEqual(shortcuts.kwake_Term.keys, "Meta+D");
+assert.strictEqual(shortcuts.kwake_Chat.keys, "");
+assert.ok(term.skipTaskbar && !chat.skipTaskbar);
+
+// A window that skips the taskbar on its own is never given back to it.
 const alreadyHidden = win("private");
 alreadyHidden.skipTaskbar = true;
 workspace.stackingOrder.push(alreadyHidden);
@@ -172,6 +195,7 @@ reload("Private | private | | Meta+P");
 reload("Private | private | | ");
 assert.ok(alreadyHidden.skipTaskbar);
 
+// Stopping gives back the windows Kwake hid and disconnects every signal.
 reload("Term | com.mitchellh.ghostty | | Meta+T\nPrivate | private | | Meta+P");
 assert.ok(term.skipTaskbar && alreadyHidden.skipTaskbar);
 runtime.stop();
