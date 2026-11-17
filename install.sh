@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=plugin-dirs.sh
+source "$SOURCE_DIR/plugin-dirs.sh"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/kwake"
 REPO="zakius/kwake"
 # The settings host looks the plugin up by the script's id, so this must equal
@@ -61,13 +63,18 @@ if [[ $UNINSTALL -eq 1 ]]; then
     fi
     exec "$SOURCE_DIR/uninstall.sh"
 fi
+if [[ $ONLINE -eq 1 && -n "$PLUGIN_FILE" ]]; then
+    echo "error: --online installs the release's own settings page; it cannot be combined with --plugin" >&2
+    usage >&2
+    exit 1
+fi
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # The directory KWin keeps its own config plugins in. It exists wherever KWin
 # is installed, unlike qtpaths, which Ubuntu only ships with its dev tools.
 kwin_plugin_dir() {
     local dir
-    for dir in "/usr/lib/$(uname -m)-linux-gnu/qt6/plugins" /usr/lib64/qt6/plugins /usr/lib/qt6/plugins; do
+    for dir in "${PLUGIN_ROOTS[@]}"; do
         if [[ -d "$dir/kwin/effects/configs" ]]; then
             echo "$dir/kwin/effects/configs"
             return
@@ -131,6 +138,17 @@ for candidate in qdbus6 qdbus-qt6 qdbus; do
     if have "$candidate"; then qdbus_cmd="$candidate"; break; fi
 done
 
+# Read before the files are replaced. Empty if there is no per-user install.
+installed_version=""
+if [[ -f "$SCRIPT_DIR/metadata.json" ]]; then
+    installed_version=$(sed -n 's/.*"Version": *"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/metadata.json")
+fi
+# True for an install older than 3.2.0, the first version that gives hidden
+# windows back to the taskbar when it is unloaded.
+unload_leaves_windows_hidden() {
+    [[ -n "$installed_version" && $(printf '%s\n' "$installed_version" 3.2.0 | sort -V | head -n 1) != 3.2.0 ]]
+}
+
 echo "==> Installing KWin script to $SCRIPT_DIR"
 rm -rf "$SCRIPT_DIR"
 mkdir -p "$SCRIPT_DIR"
@@ -140,10 +158,13 @@ echo "==> Enabling the script"
 kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true
 
 if [[ -n "$qdbus_cmd" ]]; then
-    # Kwake 3.1 and earlier need their config cleared to restore windows before unload.
-    if [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null || true) == true ]]; then
+    # Kwake 3.1 and earlier only restore windows when their list is emptied.
+    # Later versions must not see an empty list: they would also drop the
+    # shortcuts set in KDE's shortcut editor.
+    if unload_leaves_windows_hidden && [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null || true) == true ]]; then
         saved_entries=$(kreadconfig6 --file kwinrc --group Script-kwake --key Entries)
-        restore_entries() { kwriteconfig6 --file kwinrc --group Script-kwake --key Entries "$saved_entries"; }
+        # After --, so a list that starts with - is not taken for an option.
+        restore_entries() { kwriteconfig6 --file kwinrc --group Script-kwake --key Entries -- "$saved_entries"; }
         trap restore_entries EXIT
         kwriteconfig6 --file kwinrc --group Script-kwake --key Entries ""
         "$qdbus_cmd" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
@@ -153,13 +174,12 @@ if [[ -n "$qdbus_cmd" ]]; then
     fi
     echo "==> Loading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$PLUGIN_ID" >/dev/null 2>&1 || true
-    # Wait for deferred deletion before loading another script with the same name.
+    # Unloading is deferred, and start skips a name that is still loaded.
     for _ in {1..50}; do
         [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null) == true ]] || break
         sleep 0.1
     done
-    "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadDeclarativeScript \
-        "$SCRIPT_DIR/contents/ui/main.qml" "$PLUGIN_ID" >/dev/null 2>&1 || true
+    # start re-reads kwinrc and loads every enabled script that is not loaded.
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
 fi
 

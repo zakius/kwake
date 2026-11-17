@@ -7,9 +7,9 @@ mkdir -p "$tmp/bin" "$tmp/plugins/kwin/effects/configs" \
     "$tmp/data/kwin/scripts/kwake"
 touch "$tmp/data/kwin/scripts/kwake/sentinel" \
     "$tmp/plugins/kwin/effects/configs/kwake.so"
-sed "s|\"/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins\" /usr/lib64/qt6/plugins /usr/lib/qt6/plugins|\"\$MOCK_PLUGIN_ROOT\"|g" \
-    uninstall.sh >"$tmp/uninstall.sh"
-chmod +x "$tmp/uninstall.sh"
+# The copy reads its plugin directories from the file next to it.
+cp uninstall.sh "$tmp/uninstall.sh"
+echo "PLUGIN_ROOTS=(\"$tmp/plugins\")" >"$tmp/plugin-dirs.sh"
 cat >"$tmp/bin/sudo" <<'MOCK'
 #!/usr/bin/env bash
 [[ $1 == rm ]] || exit 1

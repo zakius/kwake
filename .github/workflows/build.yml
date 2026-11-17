@@ -77,6 +77,8 @@ jobs:
       - name: Package
         run: |
           curl -fsSLo /tmp/nfpm.deb https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_amd64.deb
+          # This binary builds the release packages, so pin what it is.
+          echo "3f1cf344bd0b57373ca55636a78c08b0491f7293d609a456a9ac3b0b150fda97  /tmp/nfpm.deb" | sha256sum --check
           sudo dpkg -i /tmp/nfpm.deb
           ci/make-packages.sh
 
@@ -117,6 +119,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+
+      # The packages take their version from the metadata, not from the tag.
+      - name: Check that the tag matches the script version
+        run: |
+          version=$(jq -r .KPlugin.Version script/metadata.json)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in script/metadata.json"
+            exit 1
+          fi
 
       - uses: actions/download-artifact@v4
         with:

@@ -2,6 +2,9 @@
 # Remove the per-user Kwake KWin script and its shortcuts.
 set -euo pipefail
 
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=plugin-dirs.sh
+source "$SOURCE_DIR/plugin-dirs.sh"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/kwake"
 have() { command -v "$1" >/dev/null 2>&1; }
 REMOVE_SYSTEM_PLUGIN=0
@@ -19,16 +22,14 @@ for candidate in qdbus6 qdbus-qt6 qdbus; do
     if have "$candidate"; then qdbus_cmd="$candidate"; break; fi
 done
 
-# Kwake 3.1 and earlier need empty config to restore taskbar state before unload.
-# Clearing entries also drops shortcut registrations before removing the script.
 if [[ -n "$qdbus_cmd" ]]; then
+    # An empty list makes the running script drop its shortcuts. Kwake 3.1 and
+    # earlier also need it to give windows back to the taskbar before unload.
     echo "==> Releasing windows and shortcuts"
     kwriteconfig6 --file kwinrc --group Script-kwake --key Entries ""
     "$qdbus_cmd" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
     sleep 2
-fi
 
-if [[ -n "$qdbus_cmd" ]]; then
     echo "==> Unloading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript kwake >/dev/null 2>&1 || true
 
@@ -46,7 +47,7 @@ echo "==> Removing per-user files"
 rm -rf "$SCRIPT_DIR"
 if [[ $REMOVE_SYSTEM_PLUGIN -eq 1 ]]; then
     echo "==> Removing the shared settings page"
-    for dir in "/usr/lib/$(uname -m)-linux-gnu/qt6/plugins" /usr/lib64/qt6/plugins /usr/lib/qt6/plugins; do
+    for dir in "${PLUGIN_ROOTS[@]}"; do
         plugin="$dir/kwin/effects/configs/kwake.so"
         if [[ -e "$plugin" ]]; then
             sudo rm -f "$plugin"
