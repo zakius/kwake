@@ -77,6 +77,7 @@ class KwakeKCM : public KQuickConfigModule
 {
     Q_OBJECT
     Q_PROPERTY(QString entries READ entries WRITE setEntries NOTIFY entriesChanged)
+    Q_PROPERTY(bool detecting READ detecting NOTIFY detectingChanged)
 
 public:
     KwakeKCM(QObject *parent, const KPluginMetaData &data)
@@ -88,6 +89,11 @@ public:
     QString entries() const
     {
         return m_entries;
+    }
+
+    bool detecting() const
+    {
+        return m_detecting;
     }
 
     void setEntries(const QString &entries)
@@ -103,7 +109,11 @@ public:
 
     void load() override
     {
-        m_saved = KSharedConfig::openConfig(kConfigFile)->group(kConfigGroup).readEntry(kConfigKey, QString());
+        auto config = KSharedConfig::openConfig(kConfigFile);
+        // System Settings already holds a cached KSharedConfig for kwinrc, so
+        // reparse to pick up changes made outside this process.
+        config->reparseConfiguration();
+        m_saved = config->group(kConfigGroup).readEntry(kConfigKey, QString());
         setEntries(m_saved);
     }
 
@@ -116,7 +126,9 @@ public:
         // KGlobalAccel prefers the binding it has saved over the one an action
         // registers with. The script drops the saved one before it registers a
         // changed shortcut, but only while it runs, so a change saved while
-        // Kwake is disabled would never take effect.
+        // Kwake is disabled would never take effect. Wait for each unregister
+        // before signalling KWin to reconfigure, so a late unregister cannot
+        // wipe a newly registered shortcut when kglobalacceld is separate.
         const QHash<QString, QString> before = shortcutsById(m_saved);
         const QHash<QString, QString> after = shortcutsById(m_entries);
         for (auto it = before.cbegin(); it != before.cend(); ++it) {
@@ -125,7 +137,7 @@ public:
             }
             auto unregister = QDBusMessage::createMethodCall(u"org.kde.kglobalaccel"_s, u"/kglobalaccel"_s, u"org.kde.KGlobalAccel"_s, u"unregister"_s);
             unregister.setArguments({u"kwin"_s, it.key()});
-            QDBusConnection::sessionBus().send(unregister);
+            QDBusConnection::sessionBus().call(unregister, QDBus::Block, 2000);
         }
 
         m_saved = m_entries;
@@ -159,25 +171,38 @@ public:
     // removed by the time the user clicks.
     Q_INVOKABLE void detectWindow(const QString &requestId)
     {
+        if (m_detecting) {
+            return;
+        }
+        m_detecting = true;
+        Q_EMIT detectingChanged();
+
         const auto message = QDBusMessage::createMethodCall(u"org.kde.KWin"_s, u"/KWin"_s, u"org.kde.KWin"_s, u"queryWindowInfo"_s);
         auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, requestId](QDBusPendingCallWatcher *call) {
             call->deleteLater();
+            m_detecting = false;
+            Q_EMIT detectingChanged();
             const QDBusPendingReply<QVariantMap> reply = *call;
             if (reply.isError()) {
                 return; // the user pressed Escape
             }
-            Q_EMIT windowDetected(requestId, reply.value().value(u"resourceClass"_s).toString());
+            const QString resourceClass = reply.value().value(u"resourceClass"_s).toString();
+            if (!resourceClass.isEmpty()) {
+                Q_EMIT windowDetected(requestId, resourceClass);
+            }
         });
     }
 
 Q_SIGNALS:
     void entriesChanged();
+    void detectingChanged();
     void windowDetected(const QString &requestId, const QString &resourceClass);
 
 private:
     QString m_entries;
     QString m_saved;
+    bool m_detecting = false;
 };
 
 K_PLUGIN_CLASS_WITH_JSON(KwakeKCM, "metadata.json")

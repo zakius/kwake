@@ -22,13 +22,18 @@ const configChanged = () => configSignal.emit();
 const windowAdded = win => addedSignal.emit(win);
 const windowRemoved = win => removedSignal.emit(win);
 const shortcuts = {};
+const liveHandlers = new Set();
+const shortcutEvents = [];
 const unregistered = [];
-const win = (resourceClass, caption = "") => ({ resourceClass, caption, internalId: String(nextId++), normalWindow: true, minimized: false, skipTaskbar: false, desktops: [], captionChanged: signal(), windowClassChanged: signal() });
+let stackingReads = 0;
+const win = (resourceClass, caption = "") => ({ resourceClass, caption, internalId: String(nextId++), normalWindow: true, dialog: false, minimizable: true, minimized: false, skipTaskbar: false, desktops: [], activities: [], captionChanged: signal(), windowClassChanged: signal() });
 const term = win("com.mitchellh.ghostty");
 const chat = win("vesktop");
 const panel = Object.assign(win("plasmashell"), { skipTaskbar: true });
+let stackingList = [panel, term, chat];
 const workspace = {
-    stackingOrder: [panel, term, chat],
+    get stackingOrder() { stackingReads++; return stackingList; },
+    set stackingOrder(list) { stackingList = list; },
     activeWindow: null,
     currentDesktop: "desktop 1",
     windowAdded: addedSignal,
@@ -37,12 +42,41 @@ const workspace = {
 
 const runtime = vm.createContext({});
 vm.runInContext(fs.readFileSync(__dirname + "/../script/contents/code/main.js", "utf8"), runtime);
+let deferDestroy = false;
+const deferred = [];
+const flushDeferred = () => { while (deferred.length) deferred.shift()(); };
 runtime.start({
     workspace,
     logMessage: message => messages.push(message),
     readConfig: () => config,
-    registerShortcut: (id, label, keys, callback) => { shortcuts[id] = { keys, callback }; },
-    callDBus: (...args) => { if (args[3] === "unregister") unregistered.push(args[5]); },
+    registerShortcut: (id, label, keys, callback) => {
+        const handler = { id, label, keys, callback, destroyed: false };
+        liveHandlers.add(handler);
+        shortcuts[id] = handler;
+        shortcutEvents.push(`register:${id}:${keys}`);
+        return handler;
+    },
+    destroyShortcut: (handler, done) => {
+        const run = () => {
+            if (handler) {
+                assert.ok(!handler.destroyed, "handler destroyed twice");
+                handler.destroyed = true;
+                liveHandlers.delete(handler);
+                shortcutEvents.push(`destroy:${handler.id}:${handler.keys}`);
+            }
+            if (done) done();
+        };
+        if (deferDestroy) deferred.push(run);
+        else run();
+    },
+    callDBus: (...args) => {
+        const callback = typeof args[args.length - 1] === "function" ? args.pop() : null;
+        if (args[3] === "unregister") {
+            unregistered.push(args[5]);
+            shortcutEvents.push(`unregister:${args[5]}`);
+            if (callback) callback(true);
+        }
+    },
     options: { configChanged: configSignal },
 });
 const reload = (text) => { config = text; configChanged(); };
@@ -63,12 +97,39 @@ shortcuts.kwake_Term.callback();
 assert.ok(term.minimized && chat.minimized);
 assert.strictEqual(workspace.activeWindow, term);
 
-// A window on another desktop is pulled to this one; all-desktop windows stay put.
+// Managed windows are kept on all virtual desktops and all activities.
 term.desktops = ["desktop 2"];
+term.activities = ["activity 2"];
 workspace.activeWindow = null;
 shortcuts.kwake_Term.callback();
-assert.deepStrictEqual([...term.desktops], ["desktop 1"]);
+assert.deepStrictEqual([...term.desktops], []);
+assert.deepStrictEqual([...term.activities], []);
 assert.deepStrictEqual(chat.desktops, []);
+assert.deepStrictEqual(chat.activities, []);
+
+// Switching from one focused managed window to another activates the target
+// BEFORE minimising the previous one, so KWin never bounces focus elsewhere.
+const switchLog = [];
+const origActiveDesc = Object.getOwnPropertyDescriptor(workspace, "activeWindow");
+let activeWinRef = chat;
+Object.defineProperty(workspace, "activeWindow", {
+    configurable: true,
+    get() { return activeWinRef; },
+    set(w) { activeWinRef = w; switchLog.push(`activate:${w.resourceClass}`); },
+});
+let chatMinimized = false;
+Object.defineProperty(chat, "minimized", {
+    configurable: true,
+    get() { return chatMinimized; },
+    set(v) { chatMinimized = v; if (v) switchLog.push("minimize:vesktop"); },
+});
+term.minimized = true;
+shortcuts.kwake_Term.callback();
+assert.deepStrictEqual(switchLog, ["activate:com.mitchellh.ghostty", "minimize:vesktop"]);
+Object.defineProperty(workspace, "activeWindow", origActiveDesc);
+workspace.activeWindow = term;
+delete chat.minimized;
+chat.minimized = true;
 shortcuts.kwake_Term.callback();
 
 // Removing an app unregisters its shortcut and gives its window back to the
@@ -77,10 +138,29 @@ reload("Term | com.mitchellh.ghostty |  | Ctrl+`");
 assert.deepStrictEqual(unregistered, ["kwake_Chat"]);
 assert.ok(!chat.skipTaskbar && term.skipTaskbar && panel.skipTaskbar);
 
-// Changing a shortcut drops the old binding first so the new one sticks.
+// Changing a shortcut destroys the old handler and drops the old binding before
+// registering the new one, leaving no leaked ShortcutHandlers behind.
+shortcutEvents.length = 0;
 reload("Term | com.mitchellh.ghostty |  | Meta+T");
 assert.deepStrictEqual(unregistered, ["kwake_Chat", "kwake_Term"]);
 assert.strictEqual(shortcuts.kwake_Term.keys, "Meta+T");
+assert.deepStrictEqual(shortcutEvents, [
+    "destroy:kwake_Term:Ctrl+`",
+    "unregister:kwake_Term",
+    "register:kwake_Term:Meta+T",
+]);
+assert.strictEqual(liveHandlers.size, 1);
+
+// Rapid reloads while an async destroy is pending cancel the stale replacement.
+deferDestroy = true;
+shortcutEvents.length = 0;
+reload("Term | com.mitchellh.ghostty |  | Meta+1");
+reload("Term | com.mitchellh.ghostty |  | Meta+2");
+flushDeferred();
+deferDestroy = false;
+assert.strictEqual(shortcuts.kwake_Term.keys, "Meta+2");
+assert.strictEqual(liveHandlers.size, 1);
+assert.strictEqual(shortcutEvents.filter(e => e.startsWith("register:")).length, 1);
 
 // A shortcut whose application is not running does nothing and logs nothing.
 reload("Gone | no-such-app |  | ");
@@ -195,6 +275,47 @@ reload("Private | private | | Meta+P");
 reload("Private | private | | ");
 assert.ok(alreadyHidden.skipTaskbar);
 
+// Two entries of the same class (generic + caption-filtered, or two generic)
+// claim distinct windows instead of fighting over the same one.
+const browserDocs = win("firefox", "Docs");
+const browserMusic = win("firefox", "YouTube Music");
+workspace.stackingOrder.push(browserDocs, browserMusic);
+windowAdded(browserDocs);
+windowAdded(browserMusic);
+workspace.activeWindow = browserMusic;
+reload("Browser | firefox | | Meta+1\nMusic | firefox | YouTube Music | Meta+2");
+assert.ok(browserDocs.skipTaskbar && browserMusic.skipTaskbar);
+shortcuts.kwake_Browser.callback();
+assert.strictEqual(workspace.activeWindow, browserDocs);
+shortcuts.kwake_Music.callback();
+assert.strictEqual(workspace.activeWindow, browserMusic);
+
+// A normal window is preferred over a focused transient dialog of the same class.
+const appMain = win("editor", "main.cpp");
+const appDialog = Object.assign(win("editor", "Save As"), { normalWindow: false, dialog: true, minimizable: false });
+workspace.stackingOrder.push(appMain, appDialog);
+windowAdded(appMain);
+windowAdded(appDialog);
+workspace.activeWindow = appDialog;
+reload("Editor | editor | | Meta+3");
+assert.ok(appMain.skipTaskbar && !appDialog.skipTaskbar);
+
+// Unrelated title updates do not touch workspace.stackingOrder at all.
+const readsBefore = stackingReads;
+term.caption = "prompt 1";
+term.captionChanged.emit();
+browserDocs.caption = "Docs (modified)";
+browserDocs.captionChanged.emit();
+assert.strictEqual(stackingReads, readsBefore);
+
+// Closing a window disconnects its listeners immediately, and stop() disconnects
+// watched windows even if they are no longer in workspace.stackingOrder.
+const orphanWin = win("orphan", "temp");
+workspace.stackingOrder.push(orphanWin);
+windowAdded(orphanWin);
+workspace.stackingOrder = workspace.stackingOrder.filter(w => w !== orphanWin);
+// orphanWin is still watched (not removed via windowRemoved) and not in stackingOrder.
+
 // Stopping gives back the windows Kwake hid and disconnects every signal.
 reload("Term | com.mitchellh.ghostty | | Meta+T\nPrivate | private | | Meta+P");
 assert.ok(term.skipTaskbar && alreadyHidden.skipTaskbar);
@@ -202,6 +323,7 @@ runtime.stop();
 assert.ok(!term.skipTaskbar && alreadyHidden.skipTaskbar && panel.skipTaskbar);
 configChanged();
 term.captionChanged.emit();
+orphanWin.captionChanged.emit();
 windowAdded(win("com.mitchellh.ghostty"));
 assert.ok(!term.skipTaskbar);
 

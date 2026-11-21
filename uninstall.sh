@@ -34,13 +34,13 @@ if [[ -n "$qdbus_cmd" ]]; then
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript kwake >/dev/null 2>&1 || true
 
     # Anything the script could not clean up itself, for instance after a crash.
-    names=$("$qdbus_cmd" org.kde.kglobalaccel /component/kwin \
-        org.kde.kglobalaccel.Component.shortcutNames 2>/dev/null | grep '^kwake_' || true)
-    for name in $names; do
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
         echo "    dropping shortcut $name"
         "$qdbus_cmd" org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel.unregister \
             kwin "$name" >/dev/null 2>&1 || true
-    done
+    done < <("$qdbus_cmd" org.kde.kglobalaccel /component/kwin \
+        org.kde.kglobalaccel.Component.shortcutNames 2>/dev/null | grep '^kwake_' || true)
 fi
 
 echo "==> Removing per-user files"
