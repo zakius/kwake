@@ -19,6 +19,22 @@ QtObject {
             name: id, text: label, sequence: sequence
         })
         handler.activated.connect(callback)
+        return handler
+    }
+
+    function destroyShortcut(handler, onDestroyed) {
+        if (!handler) {
+            if (onDestroyed) onDestroyed()
+            return
+        }
+        // Component.destruction fires before QObject::~QObject() deletes child
+        // objects (ShortcutHandler's QAction). Deferring with Qt.callLater runs
+        // onDestroyed after ~QAction() has removed the action from KGlobalAccel
+        // and sent setInactive, so a replacement handler is never deactivated.
+        if (onDestroyed) {
+            handler.Component.destruction.connect(() => Qt.callLater(onDestroyed))
+        }
+        handler.destroy()
     }
 
     function callDBus(service, path, dbusInterface, method, ...args) {

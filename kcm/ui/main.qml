@@ -31,7 +31,7 @@ KCM.SimpleKCM {
 
     // A separator or newline typed into a field would split it into bogus entries.
     function clean(text) {
-        return text.replace(/[|\n]/g, "").trim()
+        return text.replace(/[|\r\n]/g, "").trim()
     }
 
     function parse(text) {
@@ -57,12 +57,20 @@ KCM.SimpleKCM {
     // ignores any later entry whose id is taken. Of the remaining entries, only
     // the first with a given shortcut gets it.
     function findCollision() {
-        const names = {}
-        const shortcutOwners = {}
+        const names = Object.create(null)
+        const shortcutOwners = Object.create(null)
+        let unnamedRow = false
         for (let i = 0; i < apps.count; ++i) {
             const app = apps.get(i)
             const name = clean(app.name)
-            if (!name || !clean(app.windowClass)) {
+            const windowClass = clean(app.windowClass)
+            if (!name) {
+                if (windowClass || clean(app.caption) || app.shortcut) {
+                    unnamedRow = true
+                }
+                continue
+            }
+            if (!windowClass) {
                 continue
             }
             const id = name.replace(/[^A-Za-z0-9_-]/g, "_")
@@ -79,6 +87,9 @@ KCM.SimpleKCM {
                 return i18n("“%1” and “%2” have the same shortcut, so it only works for “%1”. Give “%2” a different one.", owner, name)
             }
             shortcutOwners[app.shortcut] = name
+        }
+        if (unnamedRow) {
+            return i18n("An application without a name will not be saved; fill in its name or remove it.")
         }
         return ""
     }
@@ -179,6 +190,7 @@ KCM.SimpleKCM {
                         Layout.fillWidth: true
                         text: card.name
                         placeholderText: i18n("Shown in the shortcuts list")
+                        validator: RegularExpressionValidator { regularExpression: /[^|\r\n]*/ }
                         onTextEdited: {
                             apps.setProperty(card.index, "name", text)
                             root.commit()
@@ -193,10 +205,21 @@ KCM.SimpleKCM {
                         Layout.fillWidth: true
                         KQuickControls.KeySequenceItem {
                             id: recorder
+                            // Do not let KeySequenceValidator steal global shortcuts
+                            // immediately on "Reassign" before the user clicks Apply.
+                            checkForConflictsAgainst: KQuickControls.ShortcutType.None
                             keySequence: kcm.toSequence(card.shortcut)
                             onKeySequenceModified: {
                                 apps.setProperty(card.index, "shortcut", kcm.toText(recorder.keySequence))
                                 root.commit()
+                            }
+                            Connections {
+                                target: card
+                                // KeySequenceItem's clear button assigns keySequence = "",
+                                // breaking the declarative binding above; keep it in sync.
+                                function onShortcutChanged() {
+                                    recorder.keySequence = kcm.toSequence(card.shortcut)
+                                }
                             }
                         }
                         Item {
@@ -218,6 +241,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             text: card.windowClass
                             placeholderText: i18n("Exact window class (required)")
+                            validator: RegularExpressionValidator { regularExpression: /[^|\r\n]*/ }
                             onTextEdited: {
                                 apps.setProperty(card.index, "windowClass", text)
                                 root.commit()
@@ -226,6 +250,7 @@ KCM.SimpleKCM {
                         QQC2.Button {
                             icon.name: "edit-find"
                             text: i18n("Detect Window…")
+                            enabled: !kcm.detecting
                             QQC2.ToolTip.text: i18n("Click a window to fill in its class")
                             QQC2.ToolTip.visible: hovered
                             onClicked: kcm.detectWindow(String(card.uid))
@@ -238,6 +263,7 @@ KCM.SimpleKCM {
                         Layout.fillWidth: true
                         text: card.caption
                         placeholderText: i18n("Optional")
+                        validator: RegularExpressionValidator { regularExpression: /[^|\r\n]*/ }
                         onTextEdited: {
                             apps.setProperty(card.index, "caption", text)
                             root.commit()

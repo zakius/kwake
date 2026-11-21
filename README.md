@@ -90,8 +90,9 @@ remove it as well, add `--remove-system-plugin`. This needs root.
 ## How it behaves
 
 - Press an application's shortcut to raise and focus its window. Kwake
-  minimises the windows of the other applications in your list. A window on
-  another virtual desktop moves to the current one.
+  minimises the windows of the other applications in your list. Managed windows
+  are kept on all virtual desktops and activities, so they follow you across
+  workspaces.
 - Press the shortcut again while the window has focus to minimise it. Focus
   returns to the window outside your list that you used last.
 - If the application is not running, the shortcut does nothing. Kwake does not

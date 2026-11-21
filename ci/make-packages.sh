@@ -18,6 +18,24 @@ version=$(jq -r .KPlugin.Version script/metadata.json)
 # One YAML list item per line of stdin.
 yaml_list() { sed 's/^/      - "/; s/$/"/'; }
 
+# RPM shared library and ELF symbol version requirements (matches elfdeps output,
+# preserving floors like libQt6Core.so.6(Qt_6.8)(64bit)).
+rpm_depends() {
+    {
+        readelf -dW "$1" | sed -n 's/.*Shared library: \[\(.*\)\]/\1()(64bit)/p'
+        readelf -VW "$1" | awk '
+            /Version needs section/ { in_need = 1; next }
+            in_need && /^$/ { in_need = 0 }
+            in_need {
+                for (i = 1; i < NF; i++) {
+                    if ($i == "File:") file = $(i + 1)
+                    if ($i == "Name:" && file != "") print file "(" $(i + 1) ")(64bit)"
+                }
+            }
+        '
+    } | LC_ALL=C sort -u
+}
+
 for plugin in dist/"$id"-*.so; do
     cpu=$(basename "$plugin" .so)
     cpu=${cpu#"$id"-}
@@ -63,7 +81,7 @@ overrides:
 $(tr ',' '\n' < "${plugin%.so}.deb-depends" | sed 's/^ *//' | yaml_list)
   rpm:
     depends:
-$(readelf -d "$plugin" | sed -n 's/.*Shared library: \[\(.*\)\]/\1()(64bit)/p' | yaml_list)
+$(rpm_depends "$plugin" | yaml_list)
 YAML
     nfpm package --config "$config" --packager deb --target "dist/$id-$arch.deb"
     nfpm package --config "$config" --packager rpm --target "dist/$id-$cpu.rpm"
