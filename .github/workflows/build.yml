@@ -11,9 +11,6 @@ jobs:
   lint:
     name: Lint (qmllint, shellcheck)
     runs-on: ubuntu-latest
-    # qmllint needs type information as current as the KDE stack the form
-    # targets. Arch tracks it closely and, unlike Debian sid, stays installable
-    # mid-transition. The C++ is checked by clazy in the plugin job.
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v5
@@ -53,7 +50,6 @@ jobs:
 
   plugin:
     name: Build with clazy (Debian 13, ${{ matrix.arch }})
-    # Each architecture builds natively on its own runner.
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
@@ -86,7 +82,6 @@ jobs:
       - name: Package
         run: |
           curl -fsSLo /tmp/nfpm.deb https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_amd64.deb
-          # This binary builds the release packages, so pin what it is.
           echo "3f1cf344bd0b57373ca55636a78c08b0491f7293d609a456a9ac3b0b150fda97  /tmp/nfpm.deb" | sha256sum --check
           sudo dpkg -i /tmp/nfpm.deb
           ci/make-packages.sh
@@ -129,7 +124,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The packages take their version from the metadata, not from the tag.
       - name: Check that the tag matches the script version
         run: |
           version=$(jq -r .KPlugin.Version script/metadata.json)

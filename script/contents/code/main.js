@@ -9,24 +9,13 @@ let callDBus;
 let log;
 
 let stopped = false;
-// id -> entry, for every application currently configured.
 let entries = Object.create(null);
-// id -> { shortcut, name } we last registered (or queued for registration).
 let registered = Object.create(null);
-// id -> live ShortcutHandler QML object, so replaced/removed handlers can be
-// destroyed instead of leaking QActions inside KGlobalAccel.
 let handlers = Object.create(null);
-// id -> generation counter cancelling stale async unregister/re-register chains.
 let pending = Object.create(null);
-// id -> callbacks waiting for the handler being destroyed to send setInactive.
 let dying = Object.create(null);
-// Entry id -> window UUID. A selected window keeps its identity as its title changes.
 let selected = Object.create(null);
-// internalId -> window, for the windows this script took off the taskbar. Only
-// these get restored, so windows that asked to skip the taskbar themselves
-// (panels, splashes) are never dragged back into it.
 let hidden = Object.create(null);
-// Window -> { onCaption, onClass } for exact disconnect on close and stop().
 let watched = new Map();
 
 function readEntries() {
@@ -48,8 +37,6 @@ function unregisterShortcut(id, done) {
     }
 }
 
-// Runs done once no handler of id is left to send setInactive, which would
-// switch off a replacement registered before it.
 function afterHandlerGone(id, done) {
     const handler = handlers[id];
     delete handlers[id];
@@ -83,13 +70,10 @@ function findWindow(entry, windows, claimed) {
         delete selected[entry.id];
         return undefined;
     }
-    // Prefer normal application windows over transient/helper dialogs, and
-    // minimizable windows over non-minimizable ones.
     const normal = matches.filter((win) => win.normalWindow);
     const byType = normal.length ? normal : matches;
     const minimizable = byType.filter((win) => win.minimizable !== false);
     const preferred = minimizable.length ? minimizable : byType;
-    // Avoid two entries latching onto the same window when distinct matches exist.
     const unclaimed = claimed
         ? preferred.filter((win) => !claimed.has(String(win.internalId)))
         : preferred;
@@ -141,7 +125,6 @@ function refreshTaskbarState(removed) {
     const claimed = new Set();
     const resolved = new Map();
     const unmatched = [];
-    // Pass 1: retain still-living selections so their IDs are claimed first.
     for (const id in entries) {
         const retainedId = selected[id];
         const retained = retainedId ? windowsById.get(retainedId) : undefined;
@@ -152,8 +135,6 @@ function refreshTaskbarState(removed) {
             unmatched.push(entries[id]);
         }
     }
-    // Pass 2: match caption-filtered entries before generic class-only entries
-    // so a specific row claims its window before a catch-all row of the same class.
     unmatched.sort((a, b) => (b.captionLower ? 1 : 0) - (a.captionLower ? 1 : 0));
     for (const entry of unmatched) {
         const win = findWindow(entry, windows, claimed);
@@ -165,7 +146,6 @@ function refreshTaskbarState(removed) {
     for (const id in entries) {
         const win = resolved.get(id);
         if (!win) continue;
-        // Quake windows should not be bound to any virtual desktop or activity.
         // Empty lists mean all desktops / all activities in KWin.
         if (win.desktops && win.desktops.length) win.desktops = [];
         if (win.activities && win.activities.length) win.activities = [];
@@ -234,12 +214,10 @@ function windowAdded(win) {
     }
 }
 
-// Minimise the target if it has focus; otherwise raise it. Either way the other
-// managed windows are minimised, so at most one of them shows at a time.
 function toggleWindow(id) {
     if (stopped) return;
     const entry = entries[id];
-    if (!entry) return; // removed from the config since this shortcut was bound
+    if (!entry) return;
 
     const managed = refreshTaskbarState();
     const target = managed.find((win) => String(win.internalId) === selected[id]);
@@ -266,8 +244,6 @@ function toggleWindow(id) {
 function applyConfig() {
     if (stopped) return;
     const updated = readEntries();
-    // Every id in selected is also in entries: findWindow only adds ids of
-    // current entries, and this loop drops the ones that go away.
     for (const id in selected) {
         if (!updated[id] || updated[id].resourceClass !== entries[id].resourceClass || updated[id].caption !== entries[id].caption) {
             delete selected[id];
@@ -277,8 +253,6 @@ function applyConfig() {
 
     for (const id in registered) {
         if (!entries[id]) {
-            // Entry deleted: destroy the old ShortcutHandler so KGlobalAccel
-            // drops its QAction, then free its key combo from the Shortcuts page.
             log(`Kwake: dropping shortcut ${id}`);
             const gen = (pending[id] = (pending[id] || 0) + 1);
             delete registered[id];
@@ -303,9 +277,6 @@ function applyConfig() {
             continue;
         }
 
-        // Destroy the old ShortcutHandler and wait for its QAction to be gone
-        // and unregistered from KGlobalAccel before creating the replacement,
-        // avoiding leaked QActions and setInactive/unregister races.
         const gen = (pending[id] = (pending[id] || 0) + 1);
         registered[id] = { shortcut, name: entry.name };
         afterHandlerGone(id, () => {
@@ -361,8 +332,6 @@ function start(host) {
     workspace.windowAdded.connect(windowAdded);
     workspace.windowRemoved.connect(forgetWindow);
 
-    // Shortcuts orphaned by an earlier session (config edited while KWin was not
-    // running, or a crash before applyConfig got to them).
     callDBus(
         KGA_SERVICE,
         "/component/kwin",

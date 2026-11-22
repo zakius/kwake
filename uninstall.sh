@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Remove the per-user Kwake KWin script and its shortcuts.
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +22,6 @@ for candidate in qdbus6 qdbus-qt6 qdbus; do
 done
 
 if [[ -n "$qdbus_cmd" ]]; then
-    # An empty list makes the running script drop its shortcuts. Kwake 3.1 and
-    # earlier also need it to give windows back to the taskbar before unload.
     echo "==> Releasing windows and shortcuts"
     kwriteconfig6 --file kwinrc --group Script-kwake --key Entries ""
     "$qdbus_cmd" org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
@@ -33,7 +30,6 @@ if [[ -n "$qdbus_cmd" ]]; then
     echo "==> Unloading the script"
     "$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript kwake >/dev/null 2>&1 || true
 
-    # Anything the script could not clean up itself, for instance after a crash.
     while IFS= read -r name; do
         [[ -n "$name" ]] || continue
         echo "    dropping shortcut $name"

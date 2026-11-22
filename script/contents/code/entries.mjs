@@ -1,14 +1,9 @@
-// The one parser for kwinrc [Script-kwake] Entries, one application per line:
-//     Name | resourceClass | caption | shortcut
-// The KWin script, the settings form and the settings plugin all import it.
-
 export function parseLine(line) {
     const fields = line.split("|").map((field) => field.trim());
     return {
         name: fields[0] ?? "",
         resourceClass: fields[1] ?? "",
         caption: fields[2] ?? "",
-        // A shortcut on the | key contains the separator itself.
         shortcut: fields.slice(3).join("|"),
     };
 }
@@ -23,14 +18,12 @@ export function formatLine(row) {
 
 export const SHORTCUT_PREFIX = "kwake_";
 
-// Anything else would break the kglobalshortcutsrc key.
 export function shortcutId(name) {
     return SHORTCUT_PREFIX + name.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
-// The rows the script acts on, in order. A row needs a name and a class. A
-// row whose id an earlier row took is ignored. A row whose shortcut an earlier
-// row took is kept without one, since KGlobalAccel gives a key to one action.
+// A row whose shortcut an earlier row took is kept without one, since
+// KGlobalAccel gives a key to one action.
 export function parseEntries(text) {
     const entries = [];
     const ignored = [];

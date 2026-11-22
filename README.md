@@ -204,7 +204,8 @@ This needs `node`, `shellcheck` and `qmllint`, and runs:
 - a check that only `script/contents/code/entries.mjs` parses the application
   list; the script, the settings form and the settings plugin all import it
 - `qmllint` on the settings form, with unknown properties as errors
-- ShellCheck on the shell scripts, and isolated uninstall tests
+- ShellCheck and two repo lints on the shell scripts, and isolated install and
+  uninstall tests
 - a check that the metadata points the settings page at the right plugin
 
 CI runs it on Arch, whose current Qt gives `qmllint` the type information it

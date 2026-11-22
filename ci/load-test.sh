@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Installs this CPU's package from dist/ with the distribution's own package
-# manager, which proves its dependencies resolve, then checks that every
-# library and symbol the installed plugin needs resolves, as the settings host
-# would when loading it. Run from the repository root inside a Debian, Ubuntu
-# or Fedora container, after make-packages.sh has filled dist/.
 set -euo pipefail
 
 if command -v dnf >/dev/null; then

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Install the Kwake KWin script and its settings page.
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,12 +6,8 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SOURCE_DIR/plugin-dirs.sh"
 SCRIPT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwin/scripts/kwake"
 REPO="zakius/kwake"
-# The settings host looks the plugin up by the script's id, so this must equal
-# KPlugin.Id in script/metadata.json; check.sh fails if they differ.
 PLUGIN_ID="kwake"
-# The self-contained installer attached to every release.
 BUNDLE="kwake.run"
-# Empty means: the plugin for this CPU embedded next to this script.
 PLUGIN_FILE=""
 ONLINE=0
 UNINSTALL=0
@@ -70,8 +65,8 @@ if [[ $ONLINE -eq 1 && -n "$PLUGIN_FILE" ]]; then
 fi
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# The directory KWin keeps its own config plugins in. It exists wherever KWin
-# is installed, unlike qtpaths, which Ubuntu only ships with its dev tools.
+# KWin's config plugin directory exists wherever KWin is installed, unlike
+# qtpaths, which Ubuntu only ships with its dev tools.
 kwin_plugin_dir() {
     local dir
     for dir in "${PLUGIN_ROOTS[@]}"; do
@@ -89,8 +84,6 @@ download_failed() {
     exit 1
 }
 
-# Fetches the latest release's installer and runs it; that installer then uses
-# its own embedded payload.
 if [[ $ONLINE -eq 1 ]]; then
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
@@ -98,7 +91,6 @@ if [[ $ONLINE -eq 1 ]]; then
     echo "==> Downloading the latest release of $REPO"
     curl -fsSL -o "$tmp/$BUNDLE" "https://github.com/$REPO/releases/latest/download/$BUNDLE" || download_failed
     curl -fsSL -o "$tmp/SHA256SUMS" "https://github.com/$REPO/releases/latest/download/SHA256SUMS" || download_failed
-    # Verified before it runs anything, let alone anything as root.
     (cd "$tmp" && sha256sum --check --ignore-missing --quiet SHA256SUMS) || {
         echo "error: the downloaded installer does not match its checksum" >&2
         exit 1
@@ -107,10 +99,8 @@ if [[ $ONLINE -eq 1 ]]; then
     exit
 fi
 
-# A release's .run file carries the plugin for each CPU next to this script.
 bundled="$SOURCE_DIR/$PLUGIN_ID-$(uname -m).so"
 [[ -z "$PLUGIN_FILE" && -f "$bundled" ]] && PLUGIN_FILE="$bundled"
-# Checked before anything is touched, so a mistake changes nothing.
 if [[ -z "$PLUGIN_FILE" ]]; then
     echo "error: no settings page for $(uname -m) next to this script." >&2
     echo "       Pass --plugin FILE, or --online to install the latest release." >&2
@@ -133,13 +123,10 @@ for candidate in qdbus6 qdbus-qt6 qdbus; do
     if have "$candidate"; then qdbus_cmd="$candidate"; break; fi
 done
 
-# Read before the files are replaced. Empty if there is no per-user install.
 installed_version=""
 if [[ -f "$SCRIPT_DIR/metadata.json" ]]; then
     installed_version=$(sed -n 's/.*"Version": *"\([^"]*\)".*/\1/p' "$SCRIPT_DIR/metadata.json")
 fi
-# True for an install older than 3.2.0, the first version that gives hidden
-# windows back to the taskbar when it is unloaded.
 unload_leaves_windows_hidden() {
     [[ -n "$installed_version" && $(printf '%s\n' "$installed_version" 3.2.0 | sort -V | head -n 1) != 3.2.0 ]]
 }
@@ -153,12 +140,8 @@ echo "==> Enabling the script"
 kwriteconfig6 --file kwinrc --group Plugins --key "${PLUGIN_ID}Enabled" true
 
 if [[ -n "$qdbus_cmd" ]]; then
-    # Kwake 3.1 and earlier only restore windows when their list is emptied.
-    # Later versions must not see an empty list: they would also drop the
-    # shortcuts set in KDE's shortcut editor.
     if unload_leaves_windows_hidden && [[ $("$qdbus_cmd" org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$PLUGIN_ID" 2>/dev/null || true) == true ]]; then
         saved_entries=$(kreadconfig6 --file kwinrc --group Script-kwake --key Entries)
-        # After --, so a list that starts with - is not taken for an option.
         restore_entries() { kwriteconfig6 --file kwinrc --group Script-kwake --key Entries -- "$saved_entries"; }
         trap restore_entries EXIT
         kwriteconfig6 --file kwinrc --group Script-kwake --key Entries ""

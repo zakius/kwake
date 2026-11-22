@@ -7,7 +7,6 @@ mkdir -p "$tmp/bin" "$tmp/plugins/kwin/effects/configs" \
     "$tmp/data/kwin/scripts/kwake"
 touch "$tmp/data/kwin/scripts/kwake/sentinel" \
     "$tmp/plugins/kwin/effects/configs/kwake.so"
-# The copy reads its plugin directories from the file next to it.
 cp uninstall.sh "$tmp/uninstall.sh"
 echo "PLUGIN_ROOTS=(\"$tmp/plugins\")" >"$tmp/plugin-dirs.sh"
 cat >"$tmp/bin/sudo" <<'MOCK'

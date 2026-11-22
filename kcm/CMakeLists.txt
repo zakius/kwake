@@ -7,11 +7,9 @@ set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 
 include(KDEInstallDirs)
 include(KDECMakeSettings)
-# Strict KDE defaults: -Wall and friends, no implicit const char* to QString.
 include(KDECompilerSettings NO_POLICY_SCOPE)
 
 find_package(Qt6 REQUIRED COMPONENTS Gui DBus Qml Quick)
-# Debian ships the KF6 modules split, with no umbrella KF6Config.cmake.
 foreach(component CoreAddons Config KCMUtils)
     find_package(KF6${component} REQUIRED)
 endforeach()
@@ -23,8 +21,6 @@ endforeach()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/../script/metadata.json" script_metadata)
 string(JSON script_id GET "${script_metadata}" KPlugin Id)
 
-# Installs into Qt's plugin directory under kwin/effects/configs, which is where
-# the X-KDE-ConfigModule entry in the script's metadata.json points.
 kcmutils_add_qml_kcm(${script_id}
     SOURCES src/kcm.cpp
     INSTALL_NAMESPACE "kwin/effects/configs"
