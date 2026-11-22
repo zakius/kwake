@@ -198,6 +198,9 @@ This needs `node`, `shellcheck` and `qmllint`, and runs:
 
 - the script against a fake KWin (`tests/test_main.mjs`): toggling, shortcut
   changes and taskbar restore
+- every order of events in the shortcut lifecycle
+  (`tests/shortcut_lifecycle.mjs`), run against the real script; see
+  `.claude/skills/verify-shortcut-lifecycle/SKILL.md`
 - a check that only `script/contents/code/entries.mjs` parses the application
   list; the script, the settings form and the settings plugin all import it
 - `qmllint` on the settings form, with unknown properties as errors

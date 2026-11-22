@@ -11,6 +11,9 @@ qmllint=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qml
 echo "==> KWin script"
 node tests/test_main.mjs
 
+echo "==> Shortcut lifecycle, every event order"
+node tests/shortcut_lifecycle.mjs
+
 echo "==> Metadata"
 # Parsing both files also validates them. The settings page only opens if the
 # script points at a plugin named after the script itself (see
