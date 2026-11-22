@@ -57,4 +57,4 @@ A modeling error usually shows as a trace step the real system cannot take. Comp
 
 Not covered: window matching and toggling, the KDE shortcut editor changing a binding, the script being disabled or reloaded while a save runs, and kglobalaccel behavior beyond `register`, `setInactive`, `unregister` and `shortcutNames`. The real KWin run in `tests/test_lifecycle.py` covers what this model leaves out.
 
-Last confirmed to describe the code at commit f8c91dc. When any covered function changes after that commit, check that the model list above still matches the code. Then rerun the check, and move this commit forward only once both agree.
+Last confirmed to describe the code at commit f298190. When any covered function changes after that commit, check that the model list above still matches the code. Then rerun the check, and move this commit forward only once both agree.
