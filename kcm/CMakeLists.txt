@@ -38,3 +38,8 @@ target_link_libraries(${script_id}
     KF6::CoreAddons
     KF6::KCMUtilsQuick
 )
+
+if(BUILD_TESTING)
+    add_executable(kcm_save tests/kcm_save.cpp)
+    target_link_libraries(kcm_save Qt6::Gui Qt6::Qml KF6::CoreAddons KF6::KCMUtilsQuick)
+endif()

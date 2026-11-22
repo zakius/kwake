@@ -221,6 +221,11 @@ This needs `kwin_wayland`, `kdialog`, `qdbus6` (`qdbus-qt6` on Fedora),
 D-Bus session, so your desktop is not affected. It tests real shortcut
 activation, disable and re-enable, direct unload, and taskbar restore.
 
+With `KWAKE_KCM_BUILD` set to a build directory of `kcm/` (`cmake -S kcm -B
+kcm/build-test && cmake --build kcm/build-test`), it also saves a changed
+shortcut through the settings page while Kwake is disabled, and checks that
+kglobalaccel uses it once Kwake is enabled again. CI runs it that way.
+
 `ci/build-plugin.sh` compiles the settings page with
 [clazy](https://invent.kde.org/sdk/clazy), KDE's Qt-aware static analyser, and
 treats warnings as errors. This catches Qt lifetime mistakes such as a lambda
