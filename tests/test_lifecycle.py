@@ -106,6 +106,7 @@ def run_session(root):
             wait_for(lambda: len(inspect()) == 3)
         kcm_build = os.environ.get('KWAKE_KCM_BUILD')
         if kcm_build:
+            kcm_build = Path(kcm_build).resolve()
             # A shortcut changed in the settings page while Kwake is disabled
             # takes effect once it is enabled again.
             def binding():
@@ -116,7 +117,7 @@ def run_session(root):
             enabled(True)
             wait_for(lambda: binding() == [meta_f10])
             enabled(False)
-            command(str(Path(kcm_build) / 'bin/kcm_save'), str(Path(kcm_build) / 'bin/kwin/effects/configs/kwake.so'),
+            command(str(kcm_build / 'bin/kcm_save'), str(kcm_build / 'bin/kwin/effects/configs/kwake.so'),
                     'Managed | org.kde.kdialog | Kwake managed | Meta+F12\nHidden | org.kde.kdialog | Kwake prehidden | Meta+F11')
             enabled(True)
             wait_for(lambda: binding() == [meta_f12])
