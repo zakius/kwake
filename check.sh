@@ -9,7 +9,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 qmllint=$(command -v qmllint6 || command -v qmllint || echo /usr/lib/qt6/bin/qmllint)
 
 echo "==> KWin script"
-node tests/test_main.js
+node tests/test_main.mjs
 
 echo "==> Metadata"
 # Parsing both files also validates them. The settings page only opens if the
@@ -27,6 +27,14 @@ const found = fs.readFileSync("install.sh", "utf8").match(/^PLUGIN_ID="([^"]+)"/
 if (!found || found[1] !== id)
     fail("install.sh: PLUGIN_ID must be " + id);
 '
+
+echo "==> One Entries parser"
+if grep -rnE --exclude=entries.mjs "split\((\"\||'\||u'\|')|A-Za-z0-9_-|u'a' && ch" script kcm/src kcm/ui; then
+    echo "error: the lines above parse kwinrc Entries outside script/contents/code/entries.mjs." >&2
+    echo "       Import parseEntries or parseLine from it instead: 'import \"entries.mjs\"' in QML," >&2
+    echo "       QJSEngine::importModule in C++. Separate parsers drifted in 98bf9f0, 75ae7ae and d14f6a9." >&2
+    exit 1
+fi
 
 echo "==> Shell scripts"
 shellcheck install.sh uninstall.sh plugin-dirs.sh check.sh tests/*.sh ci/*.sh

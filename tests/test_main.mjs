@@ -1,8 +1,9 @@
-// Self-check for script/contents/code/main.js against a fake KWin. Run: node tests/test_main.js
+// Self-check for script/contents/code/main.js against a fake KWin. Run: node tests/test_main.mjs
 // The scenarios run in order and share one set of windows.
-const assert = require("assert");
-const fs = require("fs");
-const vm = require("vm");
+import assert from "node:assert";
+import fs from "node:fs";
+import vm from "node:vm";
+import * as Entries from "../script/contents/code/entries.mjs";
 
 let config = "";
 let nextId = 0;
@@ -41,11 +42,12 @@ const workspace = {
 };
 
 const runtime = vm.createContext({});
-vm.runInContext(fs.readFileSync(__dirname + "/../script/contents/code/main.js", "utf8"), runtime);
+vm.runInContext(fs.readFileSync(new URL("../script/contents/code/main.js", import.meta.url), "utf8"), runtime);
 let deferDestroy = false;
 const deferred = [];
 const flushDeferred = () => { while (deferred.length) deferred.shift()(); };
 runtime.start({
+    entries: Entries,
     workspace,
     logMessage: message => messages.push(message),
     readConfig: () => config,
