@@ -84,10 +84,14 @@ kwin_plugin_dir() {
     exit 1
 }
 
+download_failed() {
+    echo "error: could not download the latest release from $REPO." >&2
+    exit 1
+}
+
 # Fetches the latest release's installer and runs it; that installer then uses
 # its own embedded payload.
-install_latest() {
-    # Global, not local: the EXIT trap runs after this function has returned.
+if [[ $ONLINE -eq 1 ]]; then
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
@@ -100,15 +104,6 @@ install_latest() {
         exit 1
     }
     sh "$tmp/$BUNDLE"
-}
-
-download_failed() {
-    echo "error: could not download the latest release from $REPO." >&2
-    exit 1
-}
-
-if [[ $ONLINE -eq 1 ]]; then
-    install_latest
     exit
 fi
 

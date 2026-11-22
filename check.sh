@@ -40,7 +40,20 @@ if grep -rnE --exclude=entries.mjs "split\((\"\||'\||u'\|')|A-Za-z0-9_-|u'a' && 
 fi
 
 echo "==> Shell scripts"
-shellcheck install.sh uninstall.sh plugin-dirs.sh check.sh tests/*.sh ci/*.sh
+shell_scripts=(install.sh uninstall.sh plugin-dirs.sh check.sh tests/*.sh ci/*.sh)
+shellcheck "${shell_scripts[@]}"
+if grep -nE -- '--key +[^ ]+ +"\$' "${shell_scripts[@]}"; then
+    echo "error: write a kwriteconfig6 value from a variable after --, as in --key Entries -- \"\$value\"." >&2
+    echo "       Without it a value starting with - is read as an option (0cd61b0)." >&2
+    exit 1
+fi
+if awk '/^[A-Za-z_][A-Za-z0-9_]*\(\) *\{ *$/ { body = 1 } /^\}/ { body = 0 }
+        body && /trap .*EXIT/ { print FILENAME ":" FNR ": " $0; found = 1 }
+        END { exit !found }' "${shell_scripts[@]}"; then
+    echo "error: set EXIT traps at the top level of the script, not in a function." >&2
+    echo "       The trap runs after the function returns, when its locals are gone (3dd694a)." >&2
+    exit 1
+fi
 bash tests/test_uninstall.sh
 
 echo "==> QML (qmllint)"
