@@ -51,7 +51,7 @@ A modeling error usually shows as a trace step the real system cannot take. Comp
 
 ## Coverage record
 
-- `script/contents/code/main.js`: `applyConfig`, `start`, `stop`, `unregisterShortcut`.
+- `script/contents/code/main.js`: `applyConfig`, `afterHandlerGone`, `start`, `stop`, `unregisterShortcut`.
 - `script/contents/ui/main.qml`: `registerShortcut`, `destroyShortcut`, `callDBus`.
 - `kcm/src/kcm.cpp`: `KwakeKCM::save`.
 
