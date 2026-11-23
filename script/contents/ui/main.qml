@@ -1,10 +1,12 @@
 import QtQml
 import org.kde.kwin 3.0
+import "../code/entries.mjs" as Entries
 import "../code/main.js" as Logic
 
 QtObject {
     id: root
 
+    readonly property var entries: Entries
     readonly property var workspace: Workspace
     readonly property var options: Options
     property Component shortcutComponent: ShortcutHandler {}

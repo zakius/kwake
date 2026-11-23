@@ -196,8 +196,10 @@ install and stops before it changes anything.
 
 This needs `node`, `shellcheck` and `qmllint`, and runs:
 
-- the script against a fake KWin (`tests/test_main.js`): toggling, shortcut
+- the script against a fake KWin (`tests/test_main.mjs`): toggling, shortcut
   changes and taskbar restore
+- a check that only `script/contents/code/entries.mjs` parses the application
+  list; the script, the settings form and the settings plugin all import it
 - `qmllint` on the settings form, with unknown properties as errors
 - ShellCheck on the shell scripts, and isolated uninstall tests
 - a check that the metadata points the settings page at the right plugin

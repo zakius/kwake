@@ -10,7 +10,7 @@ include(KDECMakeSettings)
 # Strict KDE defaults: -Wall and friends, no implicit const char* to QString.
 include(KDECompilerSettings NO_POLICY_SCOPE)
 
-find_package(Qt6 REQUIRED COMPONENTS Gui DBus Quick)
+find_package(Qt6 REQUIRED COMPONENTS Gui DBus Qml Quick)
 # Debian ships the KF6 modules split, with no umbrella KF6Config.cmake.
 foreach(component CoreAddons Config KCMUtils)
     find_package(KF6${component} REQUIRED)
@@ -33,6 +33,7 @@ kcmutils_add_qml_kcm(${script_id}
 target_link_libraries(${script_id}
     Qt6::Gui
     Qt6::DBus
+    Qt6::Qml
     KF6::ConfigCore
     KF6::CoreAddons
     KF6::KCMUtilsQuick

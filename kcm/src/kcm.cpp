@@ -1,13 +1,9 @@
 /*
     Config page for the Kwake KWin script.
 
-    The script stores its applications as one line per entry in
-    kwinrc [Script-kwake] Entries:
-
-        Name | resourceClass | caption | shortcut
-
-    The form lives in ui/main.qml, which parses and serialises that string.
-    This class loads and saves it, drops the saved binding of every shortcut a
+    The script stores its applications in kwinrc [Script-kwake] Entries, in
+    the format script/contents/code/entries.mjs parses. The form lives in
+    ui/main.qml. This class loads and saves the string, drops the saved binding of every shortcut a
     save changes, and runs the window picker. QML cannot reach the last two on
     its own because they need D-Bus.
 */
@@ -22,6 +18,8 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QHash>
+#include <QJSEngine>
+#include <QJSValue>
 #include <QKeySequence>
 
 using namespace Qt::StringLiterals;
@@ -31,46 +29,6 @@ namespace
 constexpr auto kConfigFile = "kwinrc"_L1;
 constexpr auto kConfigGroup = "Script-kwake"_L1;
 constexpr auto kConfigKey = "Entries"_L1;
-
-// Shortcut id -> shortcut for every row the script acts on. This repeats the
-// rules of parseEntries() in script/contents/code/main.js and must match them.
-QHash<QString, QString> shortcutsById(const QString &entries)
-{
-    QHash<QString, QString> shortcuts;
-    QStringList used;
-    const QStringList lines = entries.split(u'\n');
-    for (const QString &line : lines) {
-        QStringList fields;
-        const QStringList rawFields = line.split(u'|');
-        for (const QString &field : rawFields) {
-            fields.append(field.trimmed());
-        }
-        if (fields.size() < 2 || fields.at(0).isEmpty() || fields.at(1).isEmpty()) {
-            continue;
-        }
-
-        QString id = u"kwake_"_s;
-        const QString name = fields.at(0);
-        for (const QChar ch : name) {
-            const bool letter = (ch >= u'a' && ch <= u'z') || (ch >= u'A' && ch <= u'Z');
-            const bool digit = ch >= u'0' && ch <= u'9';
-            id.append(letter || digit || ch == u'_' || ch == u'-' ? ch : QChar(u'_'));
-        }
-        if (shortcuts.contains(id)) {
-            continue;
-        }
-
-        QString shortcut = fields.mid(3).join(u'|');
-        if (used.contains(shortcut)) {
-            shortcut.clear();
-        }
-        if (!shortcut.isEmpty()) {
-            used.append(shortcut);
-        }
-        shortcuts.insert(id, shortcut);
-    }
-    return shortcuts;
-}
 }
 
 class KwakeKCM : public KQuickConfigModule
@@ -192,6 +150,27 @@ public:
                 Q_EMIT windowDetected(requestId, resourceClass);
             }
         });
+    }
+
+private:
+    // Shortcut id -> shortcut for every row the script acts on, from the
+    // script's own parser, which the form's QML also loads.
+    QHash<QString, QString> shortcutsById(const QString &entries) const
+    {
+        const QString parser = u":/kcm/"_s + metaData().pluginId() + u"/entries.mjs"_s;
+        QJSEngine js;
+        const QJSValue parsed = js.importModule(parser).property(u"parseEntries"_s).call({entries});
+        if (parsed.isError() || parsed.isUndefined()) {
+            qWarning() << "Kwake: cannot parse entries with" << parser << parsed.toString();
+        }
+        const QJSValue list = parsed.property(u"entries"_s);
+        const int length = list.property(u"length"_s).toInt();
+        QHash<QString, QString> shortcuts;
+        for (int i = 0; i < length; ++i) {
+            const QJSValue entry = list.property(i);
+            shortcuts.insert(entry.property(u"id"_s).toString(), entry.property(u"shortcut"_s).toString());
+        }
+        return shortcuts;
     }
 
 Q_SIGNALS:

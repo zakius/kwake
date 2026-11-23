@@ -1,12 +1,5 @@
-// Kwake - applications are configured in the script's System Settings page.
-// Storage is one line per application in kwinrc [Script-kwake] Entries:
-//     Name | resourceClass | caption | shortcut
-// Class is an exact, case-insensitive match; caption is an optional substring.
-// A row is ignored if an earlier row has the same id, and loses its shortcut if
-// an earlier row has the same shortcut.
-
-const SHORTCUT_PREFIX = "kwake_";
 const KGA_SERVICE = "org.kde.kglobalaccel";
+let Entries;
 let workspace;
 let options;
 let readConfig;
@@ -34,37 +27,15 @@ let hidden = Object.create(null);
 // Window -> { onCaption, onClass } for exact disconnect on close and stop().
 let watched = new Map();
 
-function parseEntries(text) {
-    const parsed = Object.create(null);
-    const usedShortcuts = new Set();
-    text.split("\n").forEach((line) => {
-        const f = line.split("|").map((s) => s.trim());
-        const name = f[0];
-        if (!name || !f[1]) return;
-        // Anything else would break the kglobalshortcutsrc key.
-        const id = SHORTCUT_PREFIX + name.replace(/[^A-Za-z0-9_-]/g, "_");
-        if (parsed[id]) return;
-
-        // A shortcut on the | key contains the separator itself.
-        let shortcut = f.slice(3).join("|");
-        // KGlobalAccel gives a key to one action only. Without a working
-        // shortcut the row must count as unbound, or its window would leave
-        // the taskbar with no way to bring it back.
-        if (shortcut && usedShortcuts.has(shortcut)) shortcut = "";
-        if (shortcut) usedShortcuts.add(shortcut);
-
-        const caption = f[2] || "";
-        parsed[id] = {
-            name: name,
-            id: id,
-            resourceClass: f[1],
-            resourceClassLower: f[1].toLowerCase(),
-            caption: caption,
-            captionLower: caption.toLowerCase(),
-            shortcut: shortcut,
-        };
-    });
-    return parsed;
+function readEntries() {
+    const byId = Object.create(null);
+    for (const entry of Entries.parseEntries(readConfig("Entries", "").toString()).entries) {
+        byId[entry.id] = Object.assign({}, entry, {
+            resourceClassLower: entry.resourceClass.toLowerCase(),
+            captionLower: entry.caption.toLowerCase(),
+        });
+    }
+    return byId;
 }
 
 function unregisterShortcut(id, done) {
@@ -273,7 +244,7 @@ function toggleWindow(id) {
 
 function applyConfig() {
     if (stopped) return;
-    const updated = parseEntries(readConfig("Entries", "").toString());
+    const updated = readEntries();
     // Every id in selected is also in entries: findWindow only adds ids of
     // current entries, and this loop drops the ones that go away.
     for (const id in selected) {
@@ -357,6 +328,7 @@ function stop() {
 
 function start(host) {
     stopped = false;
+    Entries = host.entries;
     workspace = host.workspace;
     options = host.options;
     readConfig = host.readConfig;
@@ -384,7 +356,7 @@ function start(host) {
         (names) => {
             if (stopped || !Array.isArray(names)) return;
             names.forEach((name) => {
-                if (name.startsWith(SHORTCUT_PREFIX) && !entries[name]) {
+                if (name.startsWith(Entries.SHORTCUT_PREFIX) && !entries[name]) {
                     log(`Kwake: dropping orphaned shortcut ${name}`);
                     unregisterShortcut(name);
                 }

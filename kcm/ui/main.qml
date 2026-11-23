@@ -12,6 +12,7 @@ import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import org.kde.kquickcontrols as KQuickControls
+import "entries.mjs" as Entries
 
 KCM.SimpleKCM {
     id: root
@@ -22,7 +23,7 @@ KCM.SimpleKCM {
     // The last value this form wrote. Echoes of it are ignored, so typing never
     // rebuilds the model and steals focus from the field being edited.
     property string written: ""
-    // Set when two rows get the same shortcut id or shortcut; see findCollision().
+    // Set when Kwake ignores a row or its shortcut; see findCollision().
     property string collision: ""
 
     ListModel {
@@ -36,74 +37,48 @@ KCM.SimpleKCM {
 
     function parse(text) {
         apps.clear()
-        text.split("\n").forEach(line => {
-            const fields = line.split("|").map(field => field.trim())
-            if (!fields[0]) {
-                return
+        Entries.parseLines(text).forEach(row => {
+            if (row.name) {
+                apps.append(Object.assign({ uid: nextUid++ }, row))
             }
-            apps.append({
-                uid: nextUid++,
-                name: fields[0],
-                windowClass: fields[1] ?? "",
-                caption: fields[2] ?? "",
-                // A shortcut on the | key contains the separator itself.
-                shortcut: fields.slice(3).join("|"),
-            })
         })
-        collision = findCollision()
+        collision = findCollision(formText())
     }
 
-    // The script builds each shortcut id from the name with this same rule and
-    // ignores any later entry whose id is taken. Of the remaining entries, only
-    // the first with a given shortcut gets it.
-    function findCollision() {
-        const names = Object.create(null)
-        const shortcutOwners = Object.create(null)
-        let unnamedRow = false
+    function formText() {
+        const lines = []
         for (let i = 0; i < apps.count; ++i) {
             const app = apps.get(i)
-            const name = clean(app.name)
-            const windowClass = clean(app.windowClass)
-            if (!name) {
-                if (windowClass || clean(app.caption) || app.shortcut) {
-                    unnamedRow = true
-                }
-                continue
+            const row = { name: clean(app.name), resourceClass: clean(app.resourceClass), caption: clean(app.caption), shortcut: app.shortcut }
+            if (row.name) {
+                lines.push(Entries.formatLine(row))
             }
-            if (!windowClass) {
-                continue
-            }
-            const id = name.replace(/[^A-Za-z0-9_-]/g, "_")
-            if (names[id] !== undefined) {
-                return i18n("“%1” and “%2” get the same shortcut id, so Kwake ignores “%2”. Names differing only in spaces or non-ASCII letters collide; rename one of them.", names[id], name)
-            }
-            names[id] = name
-
-            if (!app.shortcut) {
-                continue
-            }
-            const owner = shortcutOwners[app.shortcut]
-            if (owner !== undefined) {
-                return i18n("“%1” and “%2” have the same shortcut, so it only works for “%1”. Give “%2” a different one.", owner, name)
-            }
-            shortcutOwners[app.shortcut] = name
         }
-        if (unnamedRow) {
-            return i18n("An application without a name will not be saved; fill in its name or remove it.")
+        return lines.join("\n")
+    }
+
+    function findCollision(text) {
+        const parsed = Entries.parseEntries(text)
+        if (parsed.ignored.length) {
+            const row = parsed.ignored[0]
+            return i18n("“%1” and “%2” get the same shortcut id, so Kwake ignores “%2”. Names differing only in spaces or non-ASCII letters collide; rename one of them.", row.takenBy, row.name)
+        }
+        if (parsed.unbound.length) {
+            const row = parsed.unbound[0]
+            return i18n("“%1” and “%2” have the same shortcut, so it only works for “%1”. Give “%2” a different one.", row.takenBy, row.name)
+        }
+        for (let i = 0; i < apps.count; ++i) {
+            const app = apps.get(i)
+            if (!clean(app.name) && (clean(app.resourceClass) || clean(app.caption) || app.shortcut)) {
+                return i18n("An application without a name will not be saved; fill in its name or remove it.")
+            }
         }
         return ""
     }
 
     function commit() {
-        const lines = []
-        for (let i = 0; i < apps.count; ++i) {
-            const app = apps.get(i)
-            if (clean(app.name)) {
-                lines.push([clean(app.name), clean(app.windowClass), clean(app.caption), app.shortcut].join(" | "))
-            }
-        }
-        collision = findCollision()
-        written = lines.join("\n")
+        written = formText()
+        collision = findCollision(written)
         kcm.entries = written
     }
 
@@ -113,7 +88,7 @@ KCM.SimpleKCM {
     }
 
     function addApplication() {
-        apps.append({ uid: nextUid++, name: "", windowClass: "", caption: "", shortcut: "" })
+        apps.append({ uid: nextUid++, name: "", resourceClass: "", caption: "", shortcut: "" })
     }
 
     Component.onCompleted: {
@@ -137,7 +112,7 @@ KCM.SimpleKCM {
                 if (String(apps.get(i).uid) !== requestId) {
                     continue
                 }
-                apps.setProperty(i, "windowClass", resourceClass)
+                apps.setProperty(i, "resourceClass", resourceClass)
                 if (!clean(apps.get(i).name)) {
                     apps.setProperty(i, "name", resourceClass)
                 }
@@ -172,7 +147,7 @@ KCM.SimpleKCM {
                 required property int index
                 required property int uid
                 required property string name
-                required property string windowClass
+                required property string resourceClass
                 required property string caption
                 required property string shortcut
 
@@ -239,11 +214,11 @@ KCM.SimpleKCM {
                         Layout.fillWidth: true
                         QQC2.TextField {
                             Layout.fillWidth: true
-                            text: card.windowClass
+                            text: card.resourceClass
                             placeholderText: i18n("Exact window class (required)")
                             validator: RegularExpressionValidator { regularExpression: /[^|\r\n]*/ }
                             onTextEdited: {
-                                apps.setProperty(card.index, "windowClass", text)
+                                apps.setProperty(card.index, "resourceClass", text)
                                 root.commit()
                             }
                         }
