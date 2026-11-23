@@ -272,21 +272,10 @@ const SCENARIOS = [
 // The check fails when one of them goes away as well as when a new one
 // appears, so a fix must also delete its line here.
 const KNOWN = {
-    // A replacement registers before an earlier handler's deferred delete
-    // sends setInactive, when KWin handles two reloads before that delete.
-    "two saves in a row": [
-        "kwake_A is bound to Meta+3 but inactive, so the key does nothing",
-    ],
-    "remove a row and add it back": [
-        "kwake_A is bound to Meta+1 but inactive, so the key does nothing",
-        // The KCM unregisters a shortcut that the script, which reads only
-        // the newest kwinrc, never sees change, so nothing registers it again.
-        "kwake_A has no binding in kglobalaccel",
-    ],
-    "change a shortcut and change it back": [
-        "kwake_A is bound to Meta+1 but inactive, so the key does nothing",
-        "kwake_A has no binding in kglobalaccel",
-    ],
+    // The KCM unregisters a shortcut that the script, which reads only the
+    // newest kwinrc, never sees change, so nothing registers it again.
+    "remove a row and add it back": ["kwake_A has no binding in kglobalaccel"],
+    "change a shortcut and change it back": ["kwake_A has no binding in kglobalaccel"],
 };
 
 let failed = false;

@@ -18,6 +18,8 @@ let registered = Object.create(null);
 let handlers = Object.create(null);
 // id -> generation counter cancelling stale async unregister/re-register chains.
 let pending = Object.create(null);
+// id -> callbacks waiting for the handler being destroyed to send setInactive.
+let dying = Object.create(null);
 // Entry id -> window UUID. A selected window keeps its identity as its title changes.
 let selected = Object.create(null);
 // internalId -> window, for the windows this script took off the taskbar. Only
@@ -43,6 +45,25 @@ function unregisterShortcut(id, done) {
         callDBus(KGA_SERVICE, "/kglobalaccel", "org.kde.KGlobalAccel", "unregister", "kwin", id, () => done());
     } else {
         callDBus(KGA_SERVICE, "/kglobalaccel", "org.kde.KGlobalAccel", "unregister", "kwin", id);
+    }
+}
+
+// Runs done once no handler of id is left to send setInactive, which would
+// switch off a replacement registered before it.
+function afterHandlerGone(id, done) {
+    const handler = handlers[id];
+    delete handlers[id];
+    if (handler) {
+        dying[id] = [done];
+        destroyShortcut(handler, () => {
+            const waiting = dying[id];
+            delete dying[id];
+            waiting.forEach((f) => f());
+        });
+    } else if (dying[id]) {
+        dying[id].push(done);
+    } else {
+        done();
     }
 }
 
@@ -260,10 +281,8 @@ function applyConfig() {
             // drops its QAction, then free its key combo from the Shortcuts page.
             log(`Kwake: dropping shortcut ${id}`);
             const gen = (pending[id] = (pending[id] || 0) + 1);
-            const oldHandler = handlers[id];
-            delete handlers[id];
             delete registered[id];
-            destroyShortcut(oldHandler, () => {
+            afterHandlerGone(id, () => {
                 if (!stopped && pending[id] === gen) {
                     unregisterShortcut(id);
                 }
@@ -288,10 +307,8 @@ function applyConfig() {
         // and unregistered from KGlobalAccel before creating the replacement,
         // avoiding leaked QActions and setInactive/unregister races.
         const gen = (pending[id] = (pending[id] || 0) + 1);
-        const oldHandler = handlers[id];
-        delete handlers[id];
         registered[id] = { shortcut, name: entry.name };
-        destroyShortcut(oldHandler, () => {
+        afterHandlerGone(id, () => {
             if (stopped || pending[id] !== gen) return;
             unregisterShortcut(id, () => {
                 if (stopped || pending[id] !== gen) return;
@@ -323,6 +340,7 @@ function stop() {
     registered = Object.create(null);
     handlers = Object.create(null);
     pending = Object.create(null);
+    dying = Object.create(null);
     selected = Object.create(null);
 }
 
@@ -333,10 +351,7 @@ function start(host) {
     options = host.options;
     readConfig = host.readConfig;
     registerShortcut = host.registerShortcut;
-    destroyShortcut = host.destroyShortcut || ((handler, done) => {
-        if (handler && typeof handler.destroy === "function") handler.destroy();
-        if (done) done();
-    });
+    destroyShortcut = host.destroyShortcut;
     callDBus = host.callDBus;
     log = host.logMessage;
 
