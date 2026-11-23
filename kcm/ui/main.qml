@@ -1,9 +1,3 @@
-/*
-    The Kwake settings form. One row per application, kept in a
-    ListModel and written back to kcm.entries as the line format the script
-    reads: Name | resourceClass | caption | shortcut
-*/
-
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -17,20 +11,14 @@ import "entries.mjs" as Entries
 KCM.SimpleKCM {
     id: root
 
-    // Rows are matched to Detect Window answers by uid, never by index, since
-    // rows can be added or removed while the picker is open.
     property int nextUid: 0
-    // The last value this form wrote. Echoes of it are ignored, so typing never
-    // rebuilds the model and steals focus from the field being edited.
     property string written: ""
-    // Set when Kwake ignores a row or its shortcut; see findCollision().
     property string collision: ""
 
     ListModel {
         id: apps
     }
 
-    // A separator or newline typed into a field would split it into bogus entries.
     function clean(text) {
         return text.replace(/[|\r\n]/g, "").trim()
     }
@@ -99,7 +87,6 @@ KCM.SimpleKCM {
     Connections {
         target: kcm
 
-        // load() and defaults() replace the whole value; the form's own writes come back here too.
         function onEntriesChanged() {
             if (kcm.entries !== root.written) {
                 root.written = kcm.entries
@@ -174,8 +161,6 @@ KCM.SimpleKCM {
                     QQC2.Label {
                         text: i18n("Shortcut:")
                     }
-                    // Remove sits at the end of the shortcut row, so the title
-                    // field below can run the full width of this column.
                     RowLayout {
                         Layout.fillWidth: true
                         KQuickControls.KeySequenceItem {

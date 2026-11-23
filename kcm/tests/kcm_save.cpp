@@ -1,8 +1,3 @@
-// Saves an application list through the real settings plugin, as System
-// Settings does when the user presses Apply. tests/test_lifecycle.py runs it.
-//
-//     kcm_save <plugin .so> <Entries>
-
 #include <KPluginMetaData>
 #include <KQuickConfigModule>
 #include <KQuickConfigModuleLoader>

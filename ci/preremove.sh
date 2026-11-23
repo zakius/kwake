@@ -1,6 +1,4 @@
 #!/bin/sh
-# Package preremove: unloads Kwake in running sessions, which gives back the
-# windows it hid. Upgrades keep it loaded; postinstall reloads it instead.
 set -e
 id=kwake
 

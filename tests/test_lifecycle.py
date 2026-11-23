@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Exercise enable/disable in a private, headless KWin session."""
 import json
 import os
 from pathlib import Path
@@ -13,7 +12,6 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def run_session(root):
-    # Debian and Arch name it qdbus6, Fedora qdbus-qt6.
     qdbus = shutil.which('qdbus6') or shutil.which('qdbus-qt6') or shutil.which('qdbus') or '/usr/lib/qt6/bin/qdbus'
     processes = []
     log_path = root / 'kwin.log'
@@ -74,9 +72,6 @@ def run_session(root):
             inspect('for (const w of workspace.stackingOrder) if (w.caption === "Kwake managed") w.minimized = true;')
             command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
             wait_for(lambda: not next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake managed'))
-            # Another managed window is brought up by hand and has focus. The shortcut
-            # must raise its own window, not hide it: KWin moves focus to that
-            # window the moment Kwake minimises the other one.
             inspect('for (const w of workspace.stackingOrder) if (w.caption === "Kwake prehidden") { w.minimized = false; workspace.activeWindow = w; }')
             wait_for(lambda: next(w['active'] for w in inspect() if w['caption'] == 'Kwake prehidden'))
             command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
@@ -84,7 +79,6 @@ def run_session(root):
             assert next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake prehidden')
             command(qdbus, 'org.kde.kglobalaccel', '/component/kwin', 'org.kde.kglobalaccel.Component.invokeShortcut', 'kwake_Managed')
             wait_for(lambda: next(w['minimized'] for w in inspect() if w['caption'] == 'Kwake managed'))
-            # Focus goes back to a window outside the list, not to another managed one.
             wait_for(lambda: next(w['active'] for w in inspect() if w['caption'] == 'Kwake untouched'))
             if cycle == 2:
                 bus('/Scripting', 'org.kde.kwin.Scripting.unloadScript', 'kwake')
@@ -107,8 +101,6 @@ def run_session(root):
         kcm_build = os.environ.get('KWAKE_KCM_BUILD')
         if kcm_build:
             kcm_build = Path(kcm_build).resolve()
-            # A shortcut changed in the settings page while Kwake is disabled
-            # takes effect once it is enabled again.
             def binding():
                 reply = command('busctl', '--user', 'call', 'org.kde.kglobalaccel', '/kglobalaccel', 'org.kde.KGlobalAccel',
                                 'shortcut', 'as', '4', 'kwin', 'kwake_Managed', 'KWin', 'Toggle Managed')

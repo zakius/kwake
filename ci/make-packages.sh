@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
-# Packages the KWin script and the plugins in dist/ as a .deb and an .rpm per
-# CPU. Run from the repository root with nfpm and jq on PATH, after
-# build-plugin.sh has filled dist/, .deb-depends files included:
-#
-#     ci/make-packages.sh    # writes dist/kwake-amd64.deb, dist/kwake-x86_64.rpm, ...
-#
-# The file names carry no version, so the latest ones are always at
-# releases/latest/download/; the version is in the package metadata.
-#
-# The plugin built on Debian 13 is the one both formats ship; load-test.sh
-# installs each package on the distributions it claims to support.
 set -euo pipefail
 
 id=kwake
 version=$(jq -r .KPlugin.Version script/metadata.json)
 
-# One YAML list item per line of stdin.
 yaml_list() { sed 's/^/      - "/; s/$/"/'; }
 
 # RPM shared library and ELF symbol version requirements (matches elfdeps output,

@@ -1,13 +1,3 @@
-/*
-    Config page for the Kwake KWin script.
-
-    The script stores its applications in kwinrc [Script-kwake] Entries, in
-    the format script/contents/code/entries.mjs parses. The form lives in
-    ui/main.qml. This class loads and saves the string, drops the saved binding of every shortcut a
-    save changes, and runs the window picker. QML cannot reach the last two on
-    its own because they need D-Bus.
-*/
-
 #include <KConfigGroup>
 #include <KPluginFactory>
 #include <KQuickConfigModule>
@@ -60,7 +50,6 @@ public:
             m_entries = entries;
             Q_EMIT entriesChanged();
         }
-        // Not only on a change: load() must set these for an unchanged value too.
         setNeedsSave(m_entries != m_saved);
         setRepresentsDefaults(m_entries.isEmpty());
     }
@@ -82,11 +71,7 @@ public:
         config->sync();
 
         // KGlobalAccel prefers the binding it has saved over the one an action
-        // registers with. The script drops the saved one before it registers a
-        // changed shortcut, but only while it runs, so a change saved while
-        // Kwake is disabled would never take effect. Wait for each unregister
-        // before signalling KWin to reconfigure, so a late unregister cannot
-        // wipe a newly registered shortcut when kglobalacceld is separate.
+        // registers with.
         const QHash<QString, QString> before = shortcutsById(m_saved);
         const QHash<QString, QString> after = shortcutsById(m_entries);
         for (auto it = before.cbegin(); it != before.cend(); ++it) {
@@ -101,7 +86,6 @@ public:
         m_saved = m_entries;
         setNeedsSave(false);
 
-        // The script listens for this and re-registers shortcuts in place.
         QDBusConnection::sessionBus().send(
             QDBusMessage::createMethodCall(u"org.kde.KWin"_s, u"/KWin"_s, u"org.kde.KWin"_s, u"reconfigure"_s));
     }
@@ -111,8 +95,6 @@ public:
         setEntries(QString());
     }
 
-    // QML has no value type for QKeySequence, so the shortcut recorder can only
-    // be fed and read through these.
     Q_INVOKABLE QKeySequence toSequence(const QString &text) const
     {
         return QKeySequence::fromString(text, QKeySequence::PortableText);
@@ -124,9 +106,7 @@ public:
     }
 
     // The same picker KWin Rules uses: KWin takes over the pointer until a
-    // window is clicked. The answer comes back tagged with requestId rather
-    // than aimed at a QML object, because the row that asked may have been
-    // removed by the time the user clicks.
+    // window is clicked.
     Q_INVOKABLE void detectWindow(const QString &requestId)
     {
         if (m_detecting) {
@@ -143,7 +123,7 @@ public:
             Q_EMIT detectingChanged();
             const QDBusPendingReply<QVariantMap> reply = *call;
             if (reply.isError()) {
-                return; // the user pressed Escape
+                return;
             }
             const QString resourceClass = reply.value().value(u"resourceClass"_s).toString();
             if (!resourceClass.isEmpty()) {
@@ -153,8 +133,6 @@ public:
     }
 
 private:
-    // Shortcut id -> shortcut for every row the script acts on, from the
-    // script's own parser, which the form's QML also loads.
     QHash<QString, QString> shortcutsById(const QString &entries) const
     {
         const QString parser = u":/kcm/"_s + metaData().pluginId() + u"/entries.mjs"_s;

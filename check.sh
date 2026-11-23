@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Lints everything except the C++, which clazy checks while compiling in
-# ci/build-plugin.sh. CI runs exactly this.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -15,9 +13,6 @@ echo "==> Shortcut lifecycle, every event order"
 node tests/shortcut_lifecycle.mjs
 
 echo "==> Metadata"
-# Parsing both files also validates them. The settings page only opens if the
-# script points at a plugin named after the script itself (see
-# kcm/CMakeLists.txt), and install.sh installs the plugin under that name.
 node -e '
 const fs = require("fs");
 const meta = JSON.parse(fs.readFileSync("script/metadata.json", "utf8"));
@@ -42,7 +37,7 @@ fi
 echo "==> Shell scripts"
 shell_scripts=(install.sh uninstall.sh plugin-dirs.sh check.sh tests/*.sh ci/*.sh)
 shellcheck "${shell_scripts[@]}"
-if grep -nE -- '--key +[^ ]+ +"\$' "${shell_scripts[@]}"; then
+if grep -nE -- 'kwriteconfig6 .*--key +[^ ]+ +"\$' "${shell_scripts[@]}"; then
     echo "error: write a kwriteconfig6 value from a variable after --, as in --key Entries -- \"\$value\"." >&2
     echo "       Without it a value starting with - is read as an option (0cd61b0)." >&2
     exit 1
@@ -55,10 +50,11 @@ if awk '/^[A-Za-z_][A-Za-z0-9_]*\(\) *\{ *$/ { body = 1 } /^\}/ { body = 0 }
     exit 1
 fi
 bash tests/test_uninstall.sh
+bash tests/test_install.sh
 
 echo "==> QML (qmllint)"
 # kcm and i18n are provided by the settings host at runtime, so qmllint cannot
-# see them; unqualified access is reported but not fatal. Everything else is.
+# see them.
 "$qmllint" --missing-property warning --unqualified info --max-warnings 0 kcm/ui/main.qml
 
 echo "All checks passed."

@@ -1,13 +1,3 @@
-// Exhaustive interleaving check of the shortcut lifecycle.
-//
-// Runs the real script/contents/code/main.js and the real host functions of
-// script/contents/ui/main.qml against a model of their environment: KWin's
-// event loop, the kglobalaccel daemon, D-Bus queues, and KwakeKCM::save() in
-// kcm/src/kcm.cpp. Every order in which those actors can take their next step
-// is tried. See .claude/skills/verify-shortcut-lifecycle/SKILL.md.
-//
-//     node tests/shortcut_lifecycle.mjs [source root, default: this checkout]
-
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -21,13 +11,11 @@ const kcmCpp = read("kcm/src/kcm.cpp");
 const entriesPath = path.join(root, "script/contents/code/entries.mjs");
 const Entries = fs.existsSync(entriesPath) ? await import(entriesPath) : undefined;
 
-// KwakeKCM::save() either waits for each unregister or only queues it.
 const kcmBlocks = /sessionBus\(\)\.call\(unregister, QDBus::Block/.test(kcmCpp);
 if (!kcmBlocks && !/sessionBus\(\)\.send\(unregister\)/.test(kcmCpp)) {
     throw new Error("kcm.cpp no longer calls unregister in a way this model knows; update kcmSave() here");
 }
 
-// The QML functions main.js gets as its host, cut out of main.qml unchanged.
 function qmlFunction(name) {
     const start = mainQml.indexOf(`function ${name}(`);
     if (start < 0) return "";
@@ -49,8 +37,6 @@ const signal = () => {
     };
 };
 
-// One run of the system, driven by a list of choices. Returns the actions
-// enabled at the end, or the final state when none is.
 function run(scenario, choices) {
     const trace = [];
     // The bus daemon delivers to each destination in the order it received
@@ -136,8 +122,6 @@ function run(scenario, choices) {
         return enabled;
     };
 
-    // KwakeKCM::save(): write kwinrc, unregister every changed shortcut, then
-    // ask KWin to reconfigure.
     const kcmStep = () => {
         if (kcm.unregisters === null) {
             const shortcuts = (text) => new Map(parseEntries(text).entries.map((e) => [e.id, e.shortcut]));
@@ -188,8 +172,6 @@ function run(scenario, choices) {
     return { enabled: actions(), key, trace, daemon, handlers, kwinConfig };
 }
 
-// Once every queue is empty: each configured shortcut is bound to its keys and
-// active, with exactly one handler behind it, and nothing else is left over.
 function violations(state, scenario) {
     const found = [];
     const final = parseEntries(scenario.saves[scenario.saves.length - 1]).entries;
@@ -211,8 +193,6 @@ function violations(state, scenario) {
     return found;
 }
 
-// Every distinct violation reachable in the scenario, each with the shortest
-// trace found for it.
 function explore(scenario) {
     const seen = new Set();
     const found = new Map();
@@ -268,12 +248,8 @@ const SCENARIOS = [
     },
 ];
 
-// Violations the current code has, found by this check and not fixed yet.
-// The check fails when one of them goes away as well as when a new one
-// appears, so a fix must also delete its line here.
+// https://github.com/zakius/kwake/issues/7
 const KNOWN = {
-    // The KCM unregisters a shortcut that the script, which reads only the
-    // newest kwinrc, never sees change, so nothing registers it again.
     "remove a row and add it back": ["kwake_A has no binding in kglobalaccel"],
     "change a shortcut and change it back": ["kwake_A has no binding in kglobalaccel"],
 };
