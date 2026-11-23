@@ -104,6 +104,26 @@ def run_session(root):
             late.wait(timeout=5)
             processes.remove(late)
             wait_for(lambda: len(inspect()) == 3)
+        kcm_build = os.environ.get('KWAKE_KCM_BUILD')
+        if kcm_build:
+            kcm_build = Path(kcm_build).resolve()
+            # A shortcut changed in the settings page while Kwake is disabled
+            # takes effect once it is enabled again.
+            def binding():
+                reply = command('busctl', '--user', 'call', 'org.kde.kglobalaccel', '/kglobalaccel', 'org.kde.KGlobalAccel',
+                                'shortcut', 'as', '4', 'kwin', 'kwake_Managed', 'KWin', 'Toggle Managed')
+                return reply.split()[2:]
+            meta_f10, meta_f12 = str(0x10000000 | 0x01000039), str(0x10000000 | 0x0100003b)
+            enabled(True)
+            wait_for(lambda: binding() == [meta_f10])
+            enabled(False)
+            command(str(kcm_build / 'bin/kcm_save'), str(kcm_build / 'bin/kwin/effects/configs/kwake.so'),
+                    'Managed | org.kde.kdialog | Kwake managed | Meta+F12\nHidden | org.kde.kdialog | Kwake prehidden | Meta+F11')
+            enabled(True)
+            wait_for(lambda: binding() == [meta_f12])
+            print('Settings page: a shortcut saved while Kwake is disabled takes effect.')
+        else:
+            print('Skipped the settings page step: set KWAKE_KCM_BUILD to a kcm build directory.')
         output = log_path.read_text()
         assert not any(error in output for error in ('TypeError:', 'ReferenceError:', 'Component failed to load')), output
         print('KWin lifecycle passed: shortcuts, disable/re-enable, direct unload, and owned taskbar restoration.')
