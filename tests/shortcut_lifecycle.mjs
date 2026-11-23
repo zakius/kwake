@@ -11,9 +11,15 @@ const kcmCpp = read("kcm/src/kcm.cpp");
 const entriesPath = path.join(root, "script/contents/code/entries.mjs");
 const Entries = fs.existsSync(entriesPath) ? await import(entriesPath) : undefined;
 
-const kcmBlocks = /sessionBus\(\)\.call\(unregister, QDBus::Block/.test(kcmCpp);
-if (!kcmBlocks && !/sessionBus\(\)\.send\(unregister\)/.test(kcmCpp)) {
-    throw new Error("kcm.cpp no longer calls unregister in a way this model knows; update kcmSave() here");
+// How KwakeKCM::save() hands an edited shortcut to kglobalaccel. Older trees
+// unregister it instead of setting its keys.
+const kcmWrite = [
+    { pattern: /sessionBus\(\)\.call\(setKeys, QDBus::Block/, op: "setKeys", blocks: true },
+    { pattern: /sessionBus\(\)\.call\(unregister, QDBus::Block/, op: "unregister", blocks: true },
+    { pattern: /sessionBus\(\)\.send\(unregister\)/, op: "unregister", blocks: false },
+].find((write) => write.pattern.test(kcmCpp));
+if (!kcmWrite) {
+    throw new Error("kcm.cpp no longer writes to kglobalaccel in a way this model knows; update kcmStep() here");
 }
 
 function qmlFunction(name) {
@@ -49,7 +55,7 @@ function run(scenario, choices) {
     const handlers = [];
     let configFile = scenario.initial;
     let kwinConfig = configFile;
-    const kcm = { save: 0, unregisters: null, waiting: false };
+    const kcm = { save: 0, writes: null, waiting: false };
 
     const post = (label, fn) => kwinPosted.push({ label, fn });
     const Qt = { callLater: (fn) => post("Qt.callLater callback", fn) };
@@ -101,6 +107,9 @@ function run(scenario, choices) {
             daemon.set(message.id, { keys: binding ? binding.keys : message.keys, active: true });
         } else if (message.op === "setInactive") {
             if (binding) daemon.set(message.id, { keys: binding.keys, active: false });
+        } else if (message.op === "setKeys") {
+            // setForeignShortcutKeys changes only a shortcut kglobalaccel has.
+            if (binding) daemon.set(message.id, { keys: message.keys, active: binding.active });
         } else if (message.op === "unregister") {
             daemon.delete(message.id);
         } else if (message.op === "shortcutNames") {
@@ -123,29 +132,32 @@ function run(scenario, choices) {
     };
 
     const kcmStep = () => {
-        if (kcm.unregisters === null) {
+        if (kcm.writes === null) {
             const shortcuts = (text) => new Map(parseEntries(text).entries.map((e) => [e.id, e.shortcut]));
             const before = shortcuts(configFile);
             const after = shortcuts(scenario.saves[kcm.save]);
             configFile = scenario.saves[kcm.save];
-            kcm.unregisters = [...before].filter(([id, keys]) => after.get(id) !== keys).map(([id]) => id);
+            const edited = kcmWrite.op === "setKeys"
+                ? [...after].filter(([id, keys]) => before.get(id) !== keys)
+                : [...before].filter(([id, keys]) => after.get(id) !== keys);
+            kcm.writes = edited.map(([id, keys]) => ({ op: kcmWrite.op, id, keys: kcmWrite.op === "setKeys" ? keys : undefined }));
             trace.push(`  KCM writes kwinrc: ${JSON.stringify(configFile)}`);
         }
-        if (kcmBlocks && kcm.unregisters.length) {
-            const id = kcm.unregisters.shift();
+        if (kcmWrite.blocks && kcm.writes.length) {
+            const write = kcm.writes.shift();
             kcm.waiting = true;
-            daemonBus.push({ op: "unregister", id, from: "kcm", reply: () => { kcm.waiting = false; } });
-            trace.push(`  KCM calls unregister(${id}) and waits`);
+            daemonBus.push(Object.assign({ from: "kcm", reply: () => { kcm.waiting = false; } }, write));
+            trace.push(`  KCM calls ${write.op}(${write.id}) and waits`);
             return;
         }
-        for (const id of kcm.unregisters) {
-            daemonBus.push({ op: "unregister", id, from: "kcm" });
-            trace.push(`  KCM sends unregister(${id})`);
+        for (const write of kcm.writes) {
+            daemonBus.push(Object.assign({ from: "kcm" }, write));
+            trace.push(`  KCM sends ${write.op}(${write.id})`);
         }
         kwinBus.push({ label: "reconfigure from the KCM", fn: () => { kwinConfig = configFile; options.configChanged.emit(); } });
         trace.push("  KCM sends reconfigure");
         kcm.save++;
-        kcm.unregisters = null;
+        kcm.writes = null;
     };
 
     const kwinTasks = [];
@@ -248,11 +260,7 @@ const SCENARIOS = [
     },
 ];
 
-// https://github.com/zakius/kwake/issues/7
-const KNOWN = {
-    "remove a row and add it back": ["kwake_A has no binding in kglobalaccel"],
-    "change a shortcut and change it back": ["kwake_A has no binding in kglobalaccel"],
-};
+const KNOWN = {};
 
 let failed = false;
 for (const scenario of SCENARIOS) {

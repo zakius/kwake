@@ -105,7 +105,7 @@ def run_session(root):
                 reply = command('busctl', '--user', 'call', 'org.kde.kglobalaccel', '/kglobalaccel', 'org.kde.KGlobalAccel',
                                 'shortcut', 'as', '4', 'kwin', 'kwake_Managed', 'KWin', 'Toggle Managed')
                 return reply.split()[2:]
-            meta_f10, meta_f12 = str(0x10000000 | 0x01000039), str(0x10000000 | 0x0100003b)
+            meta_f9, meta_f10, meta_f12 = (str(0x10000000 | key) for key in (0x01000038, 0x01000039, 0x0100003b))
             enabled(True)
             wait_for(lambda: binding() == [meta_f10])
             enabled(False)
@@ -114,6 +114,10 @@ def run_session(root):
             enabled(True)
             wait_for(lambda: binding() == [meta_f12])
             print('Settings page: a shortcut saved while Kwake is disabled takes effect.')
+            command(str(kcm_build / 'bin/kcm_save'), str(kcm_build / 'bin/kwin/effects/configs/kwake.so'),
+                    'Managed | org.kde.kdialog | Kwake managed | Meta+F9\nHidden | org.kde.kdialog | Kwake prehidden | Meta+F11')
+            wait_for(lambda: binding() == [meta_f9])
+            print('Settings page: a shortcut saved while Kwake runs takes effect.')
         else:
             print('Skipped the settings page step: set KWAKE_KCM_BUILD to a kcm build directory.')
         output = log_path.read_text()

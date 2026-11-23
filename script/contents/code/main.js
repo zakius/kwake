@@ -29,12 +29,8 @@ function readEntries() {
     return byId;
 }
 
-function unregisterShortcut(id, done) {
-    if (done) {
-        callDBus(KGA_SERVICE, "/kglobalaccel", "org.kde.KGlobalAccel", "unregister", "kwin", id, () => done());
-    } else {
-        callDBus(KGA_SERVICE, "/kglobalaccel", "org.kde.KGlobalAccel", "unregister", "kwin", id);
-    }
+function unregisterShortcut(id) {
+    callDBus(KGA_SERVICE, "/kglobalaccel", "org.kde.KGlobalAccel", "unregister", "kwin", id);
 }
 
 function afterHandlerGone(id, done) {
@@ -281,10 +277,7 @@ function applyConfig() {
         registered[id] = { shortcut, name: entry.name };
         afterHandlerGone(id, () => {
             if (stopped || pending[id] !== gen) return;
-            unregisterShortcut(id, () => {
-                if (stopped || pending[id] !== gen) return;
-                handlers[id] = registerShortcut(id, label, shortcut, () => toggleWindow(id));
-            });
+            handlers[id] = registerShortcut(id, label, shortcut, () => toggleWindow(id));
         });
     }
 
