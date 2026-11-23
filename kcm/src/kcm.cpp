@@ -3,7 +3,9 @@
 #include <KQuickConfigModule>
 #include <KSharedConfig>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusMetaType>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -19,7 +21,44 @@ namespace
 constexpr auto kConfigFile = "kwinrc"_L1;
 constexpr auto kConfigGroup = "Script-kwake"_L1;
 constexpr auto kConfigKey = "Entries"_L1;
+
+// KGlobalAccel's D-Bus form of a QKeySequence, (ai): its four key
+// combinations, padded with 0.
+struct DBusKeys {
+    QList<int> combinations;
+};
+
+QDBusArgument &operator<<(QDBusArgument &argument, const DBusKeys &keys)
+{
+    argument.beginStructure();
+    argument << keys.combinations;
+    argument.endStructure();
+    return argument;
 }
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, DBusKeys &keys)
+{
+    argument.beginStructure();
+    argument >> keys.combinations;
+    argument.endStructure();
+    return argument;
+}
+
+QList<DBusKeys> toDBusKeys(const QString &shortcut)
+{
+    const QKeySequence sequence = QKeySequence::fromString(shortcut, QKeySequence::PortableText);
+    if (sequence.isEmpty()) {
+        return {};
+    }
+    DBusKeys keys;
+    for (int i = 0; i < 4; ++i) {
+        keys.combinations.append(i < sequence.count() ? sequence[i].toCombined() : 0);
+    }
+    return {keys};
+}
+}
+
+Q_DECLARE_METATYPE(DBusKeys)
 
 class KwakeKCM : public KQuickConfigModule
 {
@@ -32,6 +71,8 @@ public:
         : KQuickConfigModule(parent, data)
     {
         setButtons(Apply | Default);
+        qDBusRegisterMetaType<DBusKeys>();
+        qDBusRegisterMetaType<QList<DBusKeys>>();
     }
 
     QString entries() const
@@ -70,17 +111,19 @@ public:
         config->group(kConfigGroup).writeEntry(kConfigKey, m_entries);
         config->sync();
 
-        // KGlobalAccel prefers the binding it has saved over the one an action
-        // registers with.
+        // KGlobalAccel keeps the keys it saved for a shortcut over the keys the
+        // script registers with, so set the edited keys there. An unregister
+        // would be lost if the user reverts before KWin rereads kwinrc: the
+        // script then sees no change and never registers again.
         const QHash<QString, QString> before = shortcutsById(m_saved);
         const QHash<QString, QString> after = shortcutsById(m_entries);
-        for (auto it = before.cbegin(); it != before.cend(); ++it) {
-            if (after.contains(it.key()) && after.value(it.key()) == it.value()) {
+        for (auto it = after.cbegin(); it != after.cend(); ++it) {
+            if (before.contains(it.key()) && before.value(it.key()) == it.value()) {
                 continue;
             }
-            auto unregister = QDBusMessage::createMethodCall(u"org.kde.kglobalaccel"_s, u"/kglobalaccel"_s, u"org.kde.KGlobalAccel"_s, u"unregister"_s);
-            unregister.setArguments({u"kwin"_s, it.key()});
-            QDBusConnection::sessionBus().call(unregister, QDBus::Block, 2000);
+            auto setKeys = QDBusMessage::createMethodCall(u"org.kde.kglobalaccel"_s, u"/kglobalaccel"_s, u"org.kde.KGlobalAccel"_s, u"setForeignShortcutKeys"_s);
+            setKeys.setArguments({QStringList{u"kwin"_s, it.key(), QString(), QString()}, QVariant::fromValue(toDBusKeys(it.value()))});
+            QDBusConnection::sessionBus().call(setKeys, QDBus::Block, 2000);
         }
 
         m_saved = m_entries;

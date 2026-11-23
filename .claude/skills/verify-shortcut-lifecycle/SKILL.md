@@ -28,9 +28,9 @@ The model, and the code each part stands for:
 
 - KWin's event loop runs one task at a time. Posted events (`handler.destroy()` deferred deletes, `Qt.callLater`) and incoming D-Bus messages interleave in any order.
 - A deferred delete emits `Component.destruction` first and then destroys the QAction, which sends `setInactive` (the order the comment in `destroyShortcut` relies on).
-- Creating a ShortcutHandler sends `register`. kglobalaccel keeps a saved binding over the keys an action registers with, which is why the script unregisters before it registers changed keys.
+- Creating a ShortcutHandler sends `register`. kglobalaccel keeps a saved binding over the keys an action registers with. So the settings page sets edited keys in kglobalaccel itself, and the script only re-creates the handler. The script unregisters a shortcut only when its row is gone.
 - D-Bus delivers to each destination in the order the bus daemon received the messages: one queue into kglobalaccel, one into KWin.
-- `KwakeKCM::save()` writes kwinrc, unregisters every shortcut whose keys changed, then sends `reconfigure`. The check reads `kcm.cpp` to see whether save waits for each unregister (`QDBus::Block`) or only queues it (`send`). It stops with an error if neither matches.
+- `KwakeKCM::save()` writes kwinrc, waits for `setForeignShortcutKeys` on every row whose keys changed or that is new, then sends `reconfigure`. `setForeignShortcutKeys` changes only a shortcut kglobalaccel already has. The check reads `kcm.cpp` to find how save writes to kglobalaccel. It also knows the `unregister` that older trees call, so it can replay them. It stops with an error if nothing matches.
 - KWin rereads kwinrc only when it handles `reconfigure`.
 
 Scenarios start with the script running and saved bindings in kglobalaccel, then apply one or two saves.
@@ -48,6 +48,7 @@ A modeling error usually shows as a trace step the real system cannot take. Comp
 - 75ae7ae (`node tests/shortcut_lifecycle.mjs <archive of 75ae7ae>`): "kwake_A has 2 live handlers", the leaked QAction that d14f6a9 fixed.
 - `destroyShortcut` calling `onDestroyed()` at once instead of after `Component.destruction`: "kwake_A is bound to Meta+3 but inactive", the `setInactive` race that d14f6a9 fixed.
 - `main.js` without its `pending[id]` generation checks: a stale binding and a second live handler.
+- 8af9933, where the settings page unregisters edited shortcuts: "kwake_A has no binding in kglobalaccel" after a change and change back, or a remove and re-add, before KWin rereads kwinrc (issue #7).
 
 ## Coverage record
 
@@ -55,6 +56,6 @@ A modeling error usually shows as a trace step the real system cannot take. Comp
 - `script/contents/ui/main.qml`: `registerShortcut`, `destroyShortcut`, `callDBus`.
 - `kcm/src/kcm.cpp`: `KwakeKCM::save`.
 
-Not covered: window matching and toggling, the KDE shortcut editor changing a binding, the script being disabled or reloaded while a save runs, and kglobalaccel behavior beyond `register`, `setInactive`, `unregister` and `shortcutNames`. The real KWin run in `tests/test_lifecycle.py` covers what this model leaves out.
+Not covered: window matching and toggling, the KDE shortcut editor changing a binding, the script being disabled or reloaded while a save runs, and kglobalaccel behavior beyond `register`, `setInactive`, `setForeignShortcutKeys`, `unregister` and `shortcutNames`. A real kglobalaccel applies the keys from `setForeignShortcutKeys`: `tests/test_lifecycle.py` saves with Kwake disabled, then saves with it running, and waits for each new binding. The real KWin run in `tests/test_lifecycle.py` covers what this model leaves out.
 
-Last confirmed to describe the code at commit 5063af8. When any covered function changes after that commit, check that the model list above still matches the code. Then rerun the check, and move this commit forward only once both agree.
+Last confirmed to describe the code at commit 66c2980. When any covered function changes after that commit, check that the model list above still matches the code. Then rerun the check, and move this commit forward only once both agree.
